@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="24dp"
+    android:background="#F9FAFB">
+
+    <TextView
+        android:id="@+id/tvResults"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:padding="16dp"
+        android:text="Welcome! Request permissions to access Google Fit data."
+        android:textSize="16sp" />
+
+    <Button
+        android:id="@+id/btnRequestPermission"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Request Permissions"
+        android:layout_marginTop="16dp" />
+
+    <Button
+        android:id="@+id/btnGetSteps"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Get Steps"
+        android:enabled="false"
+        android:layout_marginTop="16dp" />
+
+    <Button
+        android:id="@+id/btnGetSleep"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Get Sleep"
+        android:enabled="false"
+        android:layout_marginTop="16dp" />
+</LinearLayout>

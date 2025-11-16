@@ -1,0 +1,1469 @@
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import pickle
+import numpy as np
+import pandas as pd
+from datetime import datetime, timedelta
+import os
+import sqlite3
+import secrets
+from werkzeug.security import generate_password_hash, check_password_hash
+from functools import wraps
+
+app = Flask(__name__)
+app.config['SECRET_KEY'] = secrets.token_hex(32)
+CORS(app)  # Enable CORS for Android app to access the API
+
+# Database setup
+DATABASE = 'wakeup_call.db'
+
+def get_db():
+    """Get database connection"""
+    conn = sqlite3.connect(DATABASE)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    """Initialize database with users table"""
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Users table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            first_name TEXT NOT NULL,
+            last_name TEXT NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    # Auth tokens table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS auth_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            token TEXT UNIQUE NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+    ''')
+    
+    # User survey data table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_surveys (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            -- Demographics
+            age INTEGER,
+            sex TEXT,
+            height_cm REAL,
+            weight_kg REAL,
+            neck_circumference_cm REAL,
+            bmi REAL,
+            -- Medical history
+            hypertension INTEGER,
+            diabetes INTEGER,
+            smokes INTEGER,
+            alcohol INTEGER,
+            -- Survey scores
+            ess_score INTEGER,
+            berlin_score INTEGER,
+            stopbang_score INTEGER,
+            -- ML prediction
+            osa_probability REAL,
+            risk_level TEXT,
+            completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+    ''')
+    
+    conn.commit()
+    conn.close()
+    print("✅ Database initialized successfully!")
+
+# Initialize database on startup
+init_db()
+
+def require_auth(f):
+    """Decorator to require authentication token"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        token = request.headers.get('Authorization')
+        
+        if not token:
+            return jsonify({'error': 'No authorization token provided', 'success': False}), 401
+        
+        # Remove 'Bearer ' prefix if present
+        if token.startswith('Bearer '):
+            token = token[7:]
+        
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT u.id, u.email, u.first_name, u.last_name 
+            FROM users u 
+            JOIN auth_tokens t ON u.id = t.user_id 
+            WHERE t.token = ? AND t.expires_at > ?
+        ''', (token, datetime.now()))
+        
+        user = cursor.fetchone()
+        conn.close()
+        
+        if not user:
+            return jsonify({'error': 'Invalid or expired token', 'success': False}), 401
+        
+        # Pass user info to the route
+        request.current_user = {
+            'id': user[0],
+            'email': user[1],
+            'first_name': user[2],
+            'last_name': user[3]
+        }
+        
+        return f(*args, **kwargs)
+    
+    return decorated_function
+
+# Load the trained model and scaler
+# The lgbm_model.pkl contains the model, scaler is separate
+model = None
+scaler = None
+
+# Model paths
+MODEL_PATHS = [
+    os.path.join(os.path.dirname(__file__), 'lgbm_model.pkl'),  # backend folder
+    os.path.join(os.path.dirname(__file__), '..', 'model', 'lgbm_model.pkl'),  # model folder
+]
+
+SCALER_PATHS = [
+    os.path.join(os.path.dirname(__file__), 'scaler.pkl'),  # backend folder
+    os.path.join(os.path.dirname(__file__), '..', 'model', 'scaler.pkl'),  # model folder
+]
+
+# Load model
+for model_path in MODEL_PATHS:
+    if os.path.exists(model_path):
+        try:
+            with open(model_path, 'rb') as f:
+                loaded_data = pickle.load(f)
+            
+            # Check if it's a dict with model and scaler
+            if isinstance(loaded_data, dict):
+                model = loaded_data.get('model')
+                if not scaler:  # Only use dict scaler if separate file not found
+                    scaler = loaded_data.get('scaler')
+                print(f"✅ Model loaded from dictionary: {model_path}")
+            else:
+                # It's just the model object
+                model = loaded_data
+                print(f"✅ Model loaded from: {model_path}")
+            
+            if model is not None:
+                break
+        except Exception as e:
+            print(f"⚠️ Error loading model from {model_path}: {e}")
+
+# Load scaler separately
+for scaler_path in SCALER_PATHS:
+    if os.path.exists(scaler_path):
+        try:
+            with open(scaler_path, 'rb') as f:
+                scaler = pickle.load(f)
+            print(f"✅ Scaler loaded from: {scaler_path}")
+            break
+        except Exception as e:
+            print(f"⚠️ Error loading scaler from {scaler_path}: {e}")
+
+if model is None:
+    print("⚠️ Model file not found. Expected one of:")
+    for p in MODEL_PATHS:
+        print(f"   - {p}")
+    print("Please ensure lgbm_model.pkl exists in backend or model folder!")
+else:
+    print("✅ Model loaded successfully!")
+
+if scaler is None:
+    print("⚠️ Scaler file not found. Expected one of:")
+    for p in SCALER_PATHS:
+        print(f"   - {p}")
+    print("Please ensure scaler.pkl exists in backend or model folder!")
+else:
+    print("✅ Scaler loaded successfully!")
+
+def generate_ml_recommendation(osa_probability, risk_level, age, bmi, neck_cm, hypertension, diabetes, smokes, alcohol, ess_score, berlin_score, stopbang_score):
+    """Generate personalized recommendations based on ML prediction and risk factors"""
+    
+    recommendations = []
+    
+    # Base recommendation based on OSA probability
+    if osa_probability >= 0.7:
+        recommendations.append("🚨 HIGH RISK: Immediate sleep specialist consultation recommended")
+        recommendations.append("Consider overnight sleep study (polysomnography)")
+    elif osa_probability >= 0.4:
+        recommendations.append("⚠️ MODERATE RISK: Schedule sleep specialist appointment within 2-4 weeks")
+    else:
+        recommendations.append("✅ LOW RISK: Continue healthy sleep habits")
+    
+    # Specific recommendations based on individual risk factors
+    if bmi >= 30:
+        recommendations.append(f"🎯 Weight management: BMI {bmi:.1f} - aim for 5-10% weight loss")
+    elif bmi >= 25:
+        recommendations.append(f"💪 Healthy weight: BMI {bmi:.1f} - maintain current weight with exercise")
+    
+    if neck_cm >= 40:  # High neck circumference
+        recommendations.append("📐 Large neck circumference increases OSA risk - focus on overall weight reduction")
+    
+    if ess_score >= 16:
+        recommendations.append("😴 Excessive daytime sleepiness detected - avoid driving when sleepy")
+    elif ess_score >= 11:
+        recommendations.append("😪 Moderate sleepiness - improve sleep hygiene and consider naps")
+    
+    if berlin_score >= 2:
+        recommendations.append("💤 High snoring risk - sleep on your side, avoid alcohol before bed")
+    
+    if stopbang_score >= 5:
+        recommendations.append("📊 High STOP-BANG score - multiple OSA risk factors present")
+    
+    # Lifestyle recommendations
+    if alcohol:
+        recommendations.append("🍷 Limit alcohol, especially 3+ hours before bedtime")
+    
+    if smokes:
+        recommendations.append("🚭 Smoking cessation strongly recommended - affects airway inflammation")
+    
+    if hypertension:
+        recommendations.append("🩺 Monitor blood pressure - OSA can worsen hypertension")
+    
+    if diabetes:
+        recommendations.append("💊 Diabetes management important - OSA affects blood sugar control")
+    
+    if age >= 50:
+        recommendations.append("👴 Age-related OSA risk - regular sleep health checkups recommended")
+    
+    # Sleep hygiene for everyone
+    recommendations.append("😴 General: Maintain regular sleep schedule, dark quiet room, avoid screens before bed")
+    
+    return " | ".join(recommendations)  # Return all relevant recommendations
+
+def calculate_top_risk_factors(input_features, osa_probability):
+    """Calculate top risk factors based on actual survey data and thresholds"""
+    
+    risk_factors = []
+    
+    # Analyze each feature and its contribution to OSA risk
+    age = input_features.get('Age', 0)
+    sex = input_features.get('Sex', 0)  # 1=male, 0=female
+    bmi = input_features.get('BMI', 0)
+    neck = input_features.get('Neck_Circumference', 0)
+    ess = input_features.get('Epworth_Score', 0)
+    berlin = input_features.get('Berlin_Score', 0)
+    stopbang = input_features.get('STOPBANG_Total', 0)
+    
+    # BMI analysis
+    if bmi >= 35:
+        risk_factors.append(("Severe Obesity", f"BMI {bmi:.1f}", 0.25))
+    elif bmi >= 30:
+        risk_factors.append(("Obesity", f"BMI {bmi:.1f}", 0.15))
+    elif bmi >= 25:
+        risk_factors.append(("Overweight", f"BMI {bmi:.1f}", 0.08))
+    
+    # Neck circumference
+    if neck >= 43:
+        risk_factors.append(("Large Neck", f"{neck}cm", 0.20))
+    elif neck >= 40:
+        risk_factors.append(("Thick Neck", f"{neck}cm", 0.12))
+    
+    # Age factor
+    if age >= 65:
+        risk_factors.append(("Advanced Age", f"{age} years", 0.15))
+    elif age >= 50:
+        risk_factors.append(("Middle Age", f"{age} years", 0.08))
+    
+    # Gender (male higher risk)
+    if sex == 1:
+        risk_factors.append(("Male Gender", "Higher OSA risk", 0.10))
+    
+    # Sleepiness
+    if ess >= 16:
+        risk_factors.append(("Severe Sleepiness", f"ESS {ess}", 0.18))
+    elif ess >= 11:
+        risk_factors.append(("Moderate Sleepiness", f"ESS {ess}", 0.10))
+    
+    # Snoring
+    if berlin >= 1:
+        risk_factors.append(("Snoring Issues", f"Berlin Score {berlin}", 0.12))
+    
+    # STOP-BANG
+    if stopbang >= 6:
+        risk_factors.append(("High STOP-BANG", f"Score {stopbang}/8", 0.20))
+    elif stopbang >= 4:
+        risk_factors.append(("Moderate STOP-BANG", f"Score {stopbang}/8", 0.12))
+    
+    # Medical conditions
+    if input_features.get('Hypertension', 0):
+        risk_factors.append(("Hypertension", "High blood pressure", 0.08))
+    
+    if input_features.get('Diabetes', 0):
+        risk_factors.append(("Diabetes", "Blood sugar disorder", 0.06))
+    
+    if input_features.get('Alcohol', 0):
+        risk_factors.append(("Alcohol Use", "Relaxes throat muscles", 0.05))
+    
+    # Sort by impact and return top factors
+    risk_factors.sort(key=lambda x: x[2], reverse=True)
+    
+    # Format for frontend
+    formatted_factors = []
+    for i, (name, detail, impact) in enumerate(risk_factors[:6]):  # Top 6 factors
+        formatted_factors.append({
+            "factor": name,
+            "detail": detail,
+            "impact": f"{impact*100:.0f}%",
+            "priority": "High" if impact >= 0.15 else "Medium" if impact >= 0.08 else "Low"
+        })
+    
+    return formatted_factors
+
+# Feature list (must match training order)
+FEATURES = [
+    'Age', 'Sex', 'BMI', 'Neck_Circumference', 'Hypertension', 'Diabetes',
+    'Smokes', 'Alcohol', 'Snoring', 'Sleepiness',
+    'Epworth_Score', 'Berlin_Score', 'STOPBANG_Total',
+    'SleepQuality_Proxy_0to10', 'Sleep_Duration',
+    'Physical_Activity_Level', 'Daily_Steps'
+]
+
+# Columns to scale (numerical features)
+NUM_COLS = [
+    'Age', 'BMI', 'Neck_Circumference', 'Epworth_Score', 'STOPBANG_Total',
+    'SleepQuality_Proxy_0to10', 'Sleep_Duration', 'Physical_Activity_Level', 'Daily_Steps'
+]
+
+
+# ============ SURVEY CALCULATION UTILITIES ============
+
+def calculate_ess_score(responses):
+    """
+    Calculate Epworth Sleepiness Scale (ESS) score from survey responses.
+    responses: list of 8 integers (0-3 for each question)
+    Returns: (score, category)
+    """
+    score = sum(responses)
+    
+    if score <= 5:
+        category = "Low daytime sleepiness (normal)"
+    elif score <= 10:
+        category = "High daytime sleepiness (normal)"
+    elif score in [11, 12]:
+        category = "Mild excessive daytime sleepiness"
+    elif score in range(13, 16):
+        category = "Moderate excessive daytime sleepiness"
+    elif score in range(16, 25):
+        category = "Severe excessive daytime sleepiness"
+    else:
+        category = "Invalid"
+    
+    return score, category
+
+
+def calculate_berlin_score(category1_items, category2_items, category3_sleepy, bmi):
+    """
+    Calculate Berlin Questionnaire score.
+    Returns: (positive_categories_count, risk_category)
+    """
+    positive_categories = 0
+    
+    # Category 1: Snoring and breathing (items 2-6)
+    cat1_score = sum(1 for v in category1_items.values() if v)
+    if cat1_score >= 2:
+        positive_categories += 1
+    
+    # Category 2: Daytime sleepiness (items 7-9)
+    cat2_score = sum(1 for v in category2_items.values() if v)
+    if cat2_score >= 2:
+        positive_categories += 1
+    
+    # Category 3: Sleepiness or BMI > 30
+    if category3_sleepy or bmi > 30:
+        positive_categories += 1
+    
+    risk_category = "High Risk" if positive_categories >= 2 else "Low Risk"
+    
+    return positive_categories, risk_category
+
+
+def calculate_stopbang_score(snoring, tired, observed, pressure, age, neck_circumference, bmi, male):
+    """
+    Calculate STOP-BANG score.
+    Returns: (total_score, risk_category)
+    """
+    total_score = 0
+    stop_score = 0
+    
+    # STOP questions
+    if snoring:
+        total_score += 1
+        stop_score += 1
+    if tired:
+        total_score += 1
+        stop_score += 1
+    if observed:
+        total_score += 1
+        stop_score += 1
+    if pressure:
+        total_score += 1
+        stop_score += 1
+    
+    # BANG questions
+    if age > 50:
+        total_score += 1
+    if neck_circumference >= 40.0:
+        total_score += 1
+    if bmi > 35:
+        total_score += 1
+    if male:
+        total_score += 1
+    
+    # Determine risk level according to README.md
+    if total_score >= 5:
+        risk_category = "High Risk"
+    elif stop_score >= 2 and (male or bmi > 35 or neck_circumference >= 40.0):
+        risk_category = "High Risk"
+    elif total_score in range(3, 5):
+        risk_category = "Intermediate Risk"
+    else:
+        risk_category = "Low Risk"
+    
+    return total_score, risk_category
+
+
+@app.route('/', methods=['GET'])
+def home():
+    """Health check endpoint"""
+    return jsonify({
+        'status': 'running',
+        'message': 'WakeUp Call OSA Prediction API',
+        'model_loaded': model is not None,
+        'timestamp': datetime.now().isoformat()
+    })
+
+
+# ============ AUTHENTICATION ENDPOINTS ============
+
+@app.route('/auth/signup', methods=['POST'])
+def signup():
+    """
+    Create a new user account
+    
+    Expected JSON input:
+    {
+        "first_name": "John",
+        "last_name": "Doe",
+        "email": "john@example.com",
+        "password": "secure_password"
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        required_fields = ['first_name', 'last_name', 'email', 'password']
+        missing_fields = [f for f in required_fields if f not in data or not data[f]]
+        
+        if missing_fields:
+            return jsonify({
+                'error': f'Missing required fields: {", ".join(missing_fields)}',
+                'success': False
+            }), 400
+        
+        first_name = data['first_name'].strip()
+        last_name = data['last_name'].strip()
+        email = data['email'].strip().lower()
+        password = data['password']
+        
+        # Basic validation
+        if len(password) < 6:
+            return jsonify({
+                'error': 'Password must be at least 6 characters long',
+                'success': False
+            }), 400
+        
+        if '@' not in email or '.' not in email:
+            return jsonify({
+                'error': 'Invalid email format',
+                'success': False
+            }), 400
+        
+        # Hash password
+        password_hash = generate_password_hash(password)
+        
+        # Insert user into database
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                INSERT INTO users (first_name, last_name, email, password_hash)
+                VALUES (?, ?, ?, ?)
+            ''', (first_name, last_name, email, password_hash))
+            
+            user_id = cursor.lastrowid
+            
+            # Generate auth token (valid for 30 days)
+            token = secrets.token_urlsafe(32)
+            expires_at = datetime.now() + timedelta(days=30)
+            
+            cursor.execute('''
+                INSERT INTO auth_tokens (user_id, token, expires_at)
+                VALUES (?, ?, ?)
+            ''', (user_id, token, expires_at))
+            
+            conn.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Account created successfully',
+                'user': {
+                    'id': user_id,
+                    'first_name': first_name,
+                    'last_name': last_name,
+                    'email': email
+                },
+                'auth_token': token,
+                'expires_at': expires_at.isoformat(),
+                'has_survey': False
+            }), 201
+            
+        except sqlite3.IntegrityError:
+            return jsonify({
+                'error': 'Email already registered',
+                'success': False
+            }), 409
+        
+        finally:
+            conn.close()
+    
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'success': False
+        }), 500
+
+
+@app.route('/auth/login', methods=['POST'])
+def login():
+    """
+    Login with email and password
+    
+    Expected JSON input:
+    {
+        "email": "john@example.com",
+        "password": "secure_password"
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        email = data.get('email', '').strip().lower()
+        password = data.get('password', '')
+        
+        if not email or not password:
+            return jsonify({
+                'error': 'Email and password are required',
+                'success': False
+            }), 400
+        
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        # Get user by email
+        cursor.execute('SELECT id, first_name, last_name, email, password_hash FROM users WHERE email = ?', (email,))
+        user = cursor.fetchone()
+        
+        if not user:
+            conn.close()
+            return jsonify({
+                'error': 'Invalid email or password',
+                'success': False
+            }), 401
+        
+        # Verify password
+        if not check_password_hash(user[4], password):
+            conn.close()
+            return jsonify({
+                'error': 'Invalid email or password',
+                'success': False
+            }), 401
+        
+        # Generate new auth token
+        token = secrets.token_urlsafe(32)
+        expires_at = datetime.now() + timedelta(days=30)
+        
+        cursor.execute('''
+            INSERT INTO auth_tokens (user_id, token, expires_at)
+            VALUES (?, ?, ?)
+        ''', (user[0], token, expires_at))
+        
+        # Check if user has completed survey
+        cursor.execute('''
+            SELECT COUNT(*) FROM user_surveys WHERE user_id = ?
+        ''', (user[0],))
+        has_survey = cursor.fetchone()[0] > 0
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Login successful',
+            'user': {
+                'id': user[0],
+                'first_name': user[1],
+                'last_name': user[2],
+                'email': user[3]
+            },
+            'auth_token': token,
+            'expires_at': expires_at.isoformat(),
+            'has_survey': has_survey
+        }), 200
+    
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'success': False
+        }), 500
+
+
+@app.route('/auth/logout', methods=['POST'])
+@require_auth
+def logout():
+    """Logout and invalidate token"""
+    try:
+        token = request.headers.get('Authorization', '').replace('Bearer ', '')
+        
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM auth_tokens WHERE token = ?', (token,))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Logged out successfully'
+        }), 200
+    
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'success': False
+        }), 500
+
+
+@app.route('/auth/verify', methods=['GET'])
+@require_auth
+def verify_token():
+    """Verify if current token is valid"""
+    return jsonify({
+        'success': True,
+        'user': request.current_user
+    }), 200
+
+
+@app.route('/survey/get-latest', methods=['GET'])
+@require_auth
+def get_latest_survey():
+    """
+    Get the latest survey results for the authenticated user
+    Returns the most recent survey submission from the database in the same format as submit
+    """
+    try:
+        user_id = request.current_user['id']
+        
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT id, age, sex, height_cm, weight_kg, neck_circumference_cm, bmi,
+                   hypertension, diabetes, smokes, alcohol,
+                   ess_score, berlin_score, stopbang_score, osa_probability, risk_level, completed_at
+            FROM user_surveys
+            WHERE user_id = ?
+            ORDER BY completed_at DESC
+            LIMIT 1
+        ''', (user_id,))
+        
+        survey = cursor.fetchone()
+        conn.close()
+        
+        if not survey:
+            return jsonify({
+                'success': False,
+                'message': 'No survey data found',
+                'data': None
+            }), 404
+        
+        # Extract survey data
+        survey_id = survey[0]
+        age = survey[1]
+        bmi = survey[6]
+        hypertension = bool(survey[7])
+        diabetes = bool(survey[8])
+        smokes = bool(survey[9])
+        alcohol = bool(survey[10])
+        ess_score = survey[11]
+        berlin_score = survey[12]
+        stopbang_score = survey[13]
+        osa_probability = survey[14]
+        risk_level = survey[15]
+        
+        # Determine score categories
+        if ess_score < 8:
+            ess_category = "Normal"
+        elif ess_score < 12:
+            ess_category = "Mild"
+        elif ess_score < 16:
+            ess_category = "Moderate"
+        else:
+            ess_category = "Severe"
+        
+        berlin_category = "High Risk" if berlin_score >= 2 else "Low Risk"
+        
+        if stopbang_score < 3:
+            stopbang_category = "Low Risk"
+        elif stopbang_score < 5:
+            stopbang_category = "Intermediate Risk"
+        else:
+            stopbang_category = "High Risk"
+        
+        # Generate recommendation based on risk level
+        if osa_probability >= 0.7:
+            recommendation = "HIGH RISK: Immediate sleep specialist consultation recommended"
+        elif osa_probability >= 0.4:
+            recommendation = "MODERATE RISK: Schedule sleep specialist appointment within 2-4 weeks"
+        else:
+            recommendation = "LOW RISK: Continue healthy sleep habits"
+        
+        # Calculate top risk factors
+        top_factors = []
+        if bmi >= 30:
+            top_factors.append({
+                'factor': f'High BMI ({bmi:.1f})',
+                'detail': 'Obesity significantly increases OSA risk',
+                'impact': 'High',
+                'priority': '1'
+            })
+        if stopbang_score >= 5:
+            top_factors.append({
+                'factor': f'High STOP-BANG Score ({stopbang_score})',
+                'detail': 'Multiple OSA risk factors present',
+                'impact': 'High',
+                'priority': '2'
+            })
+        if ess_score >= 11:
+            top_factors.append({
+                'factor': f'Excessive Daytime Sleepiness (ESS: {ess_score})',
+                'detail': 'Significant sleepiness during daytime',
+                'impact': 'Medium',
+                'priority': '3'
+            })
+        if age >= 50:
+            top_factors.append({
+                'factor': f'Age ({age} years)',
+                'detail': 'OSA risk increases with age',
+                'impact': 'Medium',
+                'priority': '4'
+            })
+        if hypertension:
+            top_factors.append({
+                'factor': 'Hypertension',
+                'detail': 'High blood pressure linked to OSA',
+                'impact': 'Medium',
+                'priority': '5'
+            })
+        
+        # Extract demographics for response
+        sex = survey[2]
+        height_cm = survey[3]
+        weight_kg = survey[4]
+        neck_cm = survey[5]
+        
+        # Return in the same format as submit endpoint
+        return jsonify({
+            'success': True,
+            'message': 'Survey data retrieved successfully',
+            'data': {
+                'success': True,
+                'message': 'Survey data retrieved',
+                'survey_id': survey_id,
+                'demographics': {
+                    'age': age,
+                    'sex': sex,
+                    'height_cm': height_cm,
+                    'weight_kg': weight_kg,
+                    'neck_circumference_cm': neck_cm
+                },
+                'medical_history': {
+                    'hypertension': hypertension,
+                    'diabetes': diabetes,
+                    'smokes': smokes,
+                    'alcohol': alcohol
+                },
+                'scores': {
+                    'ess': {
+                        'score': ess_score,
+                        'category': ess_category
+                    },
+                    'berlin': {
+                        'score': berlin_score,
+                        'category': berlin_category
+                    },
+                    'stopbang': {
+                        'score': stopbang_score,
+                        'category': stopbang_category
+                    }
+                },
+                'prediction': {
+                    'osa_probability': round(osa_probability, 3),
+                    'risk_level': risk_level,
+                    'recommendation': recommendation
+                },
+                'top_risk_factors': top_factors[:5],  # Return top 5
+                'calculated_metrics': {
+                    'bmi': round(bmi, 1)
+                }
+            }
+        }), 200
+    
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'success': False
+        }), 500
+
+
+@app.route('/survey/submit', methods=['POST'])
+@require_auth
+def submit_survey():
+    """
+    Save survey results and generate OSA prediction
+    
+    Expected JSON input:
+    {
+        "demographics": {
+            "age": 45,
+            "sex": "male",
+            "height_cm": 175,
+            "weight_kg": 85,
+            "neck_circumference_cm": 42
+        },
+        "medical_history": {
+            "hypertension": true,
+            "diabetes": false,
+            "smokes": false,
+            "alcohol": true
+        },
+        "survey_responses": {
+            "ess_responses": [2, 1, 2, 1, 2, 1, 2, 1],
+            "berlin_responses": {...},
+            "stopbang_responses": {...}
+        },
+        "google_fit": {
+            "daily_steps": 8000,
+            "sleep_duration_hours": 6.5
+        }
+    }
+    """
+    try:
+        data = request.get_json()
+        user_id = request.current_user['id']
+        
+        print(f"🔵 === SURVEY SUBMISSION RECEIVED ===")
+        print(f"🔵 User ID: {user_id}")
+        print(f"🔵 Raw data keys: {list(data.keys())}")
+        
+        # Extract demographics
+        demo = data.get('demographics', {})
+        print(f"🔵 Demographics received: {demo}")
+        age = demo.get('age', 30)
+        sex = 1 if demo.get('sex', 'male').lower() == 'male' else 0
+        height_cm = demo.get('height_cm', 170)
+        weight_kg = demo.get('weight_kg', 70)
+        neck_cm = demo.get('neck_circumference_cm', 37)
+        
+        # Calculate BMI
+        height_m = height_cm / 100
+        bmi = weight_kg / (height_m ** 2)
+        
+        # Extract medical history
+        medical = data.get('medical_history', {})
+        hypertension = 1 if medical.get('hypertension', False) else 0
+        diabetes = 1 if medical.get('diabetes', False) else 0
+        smokes = 1 if medical.get('smokes', False) else 0
+        alcohol = 1 if medical.get('alcohol', False) else 0
+        
+        # Extract survey responses
+        surveys = data.get('survey_responses', {})
+        
+        # ESS calculation
+        ess_responses = surveys.get('ess_responses', [1, 1, 1, 1, 1, 1, 1, 1])
+        ess_score, ess_category = calculate_ess_score(ess_responses)
+        
+        # Berlin calculation
+        berlin_data = surveys.get('berlin_responses', {})
+        berlin_cat1 = berlin_data.get('category1', {})
+        berlin_cat2 = berlin_data.get('category2', {})
+        berlin_cat3_sleepy = berlin_data.get('category3_sleepy', False)
+        berlin_score, berlin_category = calculate_berlin_score(berlin_cat1, berlin_cat2, berlin_cat3_sleepy, bmi)
+        berlin_score_binary = 1 if berlin_category == "High Risk" else 0
+        
+        # STOP-BANG calculation
+        stopbang_data = surveys.get('stopbang_responses', {})
+        snoring = stopbang_data.get('snoring', False)
+        tired = stopbang_data.get('tired', False)
+        observed = stopbang_data.get('observed_apnea', False)
+        pressure = stopbang_data.get('hypertension', hypertension == 1)
+        
+        stopbang_score, stopbang_category = calculate_stopbang_score(
+            snoring, tired, observed, pressure,
+            age, neck_cm, bmi, sex == 1
+        )
+        
+        # Extract Google Fit data
+        fit_data = data.get('google_fit', {})
+        daily_steps = fit_data.get('daily_steps', 5000)
+        
+        # Better sleep duration estimation if not provided
+        if 'sleep_duration_hours' in fit_data:
+            sleep_duration = fit_data['sleep_duration_hours']
+        else:
+            # Estimate based on sleep problems (Berlin + ESS scores)
+            if berlin_score >= 2:  # High snoring/sleep problems
+                sleep_duration = 5.5 + (ess_score / 24) * 2  # 5.5-7.5 hours
+            else:
+                sleep_duration = 6.5 + (24 - ess_score) / 24 * 1.5  # 6.5-8 hours
+            sleep_duration = max(4.0, min(10.0, sleep_duration))
+        
+        # Estimate additional features
+        sleepiness = 1 if ess_score > 10 else 0
+        snoring_binary = 1 if snoring else 0
+        
+        # Estimate activity level from steps (1-5 scale)
+        if daily_steps < 3000:
+            activity_level = 1  # Sedentary
+        elif daily_steps < 6000:
+            activity_level = 2  # Low active
+        elif daily_steps < 8000:
+            activity_level = 3  # Moderate
+        elif daily_steps < 10000:
+            activity_level = 4  # Active
+        else:
+            activity_level = 5  # Very active
+        
+        # Adjust for age and health conditions
+        if age > 60: activity_level = max(1, activity_level - 1)
+        if hypertension or diabetes: activity_level = max(1, activity_level - 1)
+        
+        # Estimate sleep quality (inverse of sleepiness)
+        sleep_quality = max(1, min(10, 10 - (ess_score // 3)))
+        
+        # Convert Berlin score to binary (0 = low risk, 1 = high risk)
+        berlin_score_binary = 1 if berlin_score >= 2 else 0
+        
+        # Build feature dictionary for ML model
+        input_features = {
+            'Age': age,
+            'Sex': sex,
+            'BMI': bmi,
+            'Neck_Circumference': neck_cm,
+            'Hypertension': hypertension,
+            'Diabetes': diabetes,
+            'Smokes': smokes,
+            'Alcohol': alcohol,
+            'Snoring': snoring_binary,
+            'Sleepiness': sleepiness,
+            'Epworth_Score': ess_score,
+            'Berlin_Score': berlin_score_binary,
+            'STOPBANG_Total': stopbang_score,
+            'SleepQuality_Proxy_0to10': sleep_quality,
+            'Sleep_Duration': sleep_duration,
+            'Physical_Activity_Level': activity_level,
+            'Daily_Steps': daily_steps
+        }
+        
+        # Make prediction if model is loaded
+        osa_probability = 0.0
+        risk_level = "Unknown"
+        recommendation = ""
+        
+        if model is not None:
+            try:
+                # DEBUG: Print input features
+                print(f"🔍 DEBUG: Input features for ML model:")
+                for feature, value in input_features.items():
+                    print(f"  {feature}: {value}")
+                
+                # Create DataFrame (NO SCALING - LightGBM works without it)
+                X_input = pd.DataFrame([{f: input_features[f] for f in FEATURES}])
+                print(f"🔍 DEBUG: DataFrame shape: {X_input.shape}")
+                print(f"🔍 DEBUG: DataFrame columns: {list(X_input.columns)}")
+                print(f"🔍 DEBUG: DataFrame values: {X_input.iloc[0].tolist()}")
+                
+                # Get prediction (no scaling needed)
+                y_prob = model.predict_proba(X_input)[:, 1][0]
+                osa_probability = float(y_prob)
+                print(f"🔍 DEBUG: Raw prediction: {y_prob}")
+                print(f"🔍 DEBUG: OSA Probability: {osa_probability}")
+                
+                # Determine risk level and generate ML-based recommendations
+                if y_prob < 0.3:
+                    risk_level = "Low Risk"
+                elif y_prob < 0.6:
+                    risk_level = "Moderate Risk"
+                else:
+                    risk_level = "High Risk"
+                
+                # Generate personalized recommendation
+                recommendation = generate_ml_recommendation(
+                    osa_probability, risk_level, age, bmi, neck_cm, 
+                    hypertension, diabetes, smokes, alcohol, 
+                    ess_score, berlin_score, stopbang_score
+                )
+            except Exception as e:
+                print(f"❌ Prediction error: {e}")
+        
+        # Calculate top risk factors based on actual survey data
+        top_factors = calculate_top_risk_factors(input_features, osa_probability)
+        print(f"🎯 Top risk factors: {len(top_factors)} factors calculated")
+        
+        # Save to database with all demographics and medical history
+        # Check if user already has a survey - if yes, UPDATE instead of INSERT
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        try:
+            # Check for existing survey
+            cursor.execute('SELECT id FROM user_surveys WHERE user_id = ?', (user_id,))
+            existing_survey = cursor.fetchone()
+            
+            if existing_survey:
+                # UPDATE existing survey
+                survey_id = existing_survey[0]
+                print(f"🔄 Updating survey for user {user_id}:")
+                print(f"   Age: {age}, Sex: {demo.get('sex', 'male')}, BMI: {bmi:.1f}")
+                print(f"   ESS: {ess_score}, Berlin: {berlin_score_binary}, STOP-BANG: {stopbang_score}")
+                print(f"   OSA Probability: {osa_probability:.3f}, Risk: {risk_level}")
+                
+                cursor.execute('''
+                    UPDATE user_surveys 
+                    SET age = ?, sex = ?, height_cm = ?, weight_kg = ?, neck_circumference_cm = ?, bmi = ?,
+                        hypertension = ?, diabetes = ?, smokes = ?, alcohol = ?,
+                        ess_score = ?, berlin_score = ?, stopbang_score = ?, 
+                        osa_probability = ?, risk_level = ?, completed_at = CURRENT_TIMESTAMP
+                    WHERE user_id = ?
+                ''', (age, demo.get('sex', 'male'), height_cm, weight_kg, neck_cm, bmi,
+                      hypertension, diabetes, smokes, alcohol,
+                      ess_score, berlin_score_binary, stopbang_score, osa_probability, risk_level, user_id))
+                
+                rows_affected = cursor.rowcount
+                print(f"✅ Updated existing survey (ID: {survey_id}, rows affected: {rows_affected}) for user {user_id}")
+                
+                # Verify the update by reading back
+                cursor.execute('''
+                    SELECT age, ess_score, berlin_score, stopbang_score, osa_probability, risk_level 
+                    FROM user_surveys WHERE user_id = ?
+                ''', (user_id,))
+                verify = cursor.fetchone()
+                if verify:
+                    print(f"🔍 Verification - DB now has: Age={verify[0]}, ESS={verify[1]}, Berlin={verify[2]}, STOP-BANG={verify[3]}, OSA={verify[4]:.3f}, Risk={verify[5]}")
+            else:
+                # INSERT new survey
+                cursor.execute('''
+                    INSERT INTO user_surveys 
+                    (user_id, age, sex, height_cm, weight_kg, neck_circumference_cm, bmi,
+                     hypertension, diabetes, smokes, alcohol,
+                     ess_score, berlin_score, stopbang_score, osa_probability, risk_level)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (user_id, age, demo.get('sex', 'male'), height_cm, weight_kg, neck_cm, bmi,
+                      hypertension, diabetes, smokes, alcohol,
+                      ess_score, berlin_score_binary, stopbang_score, osa_probability, risk_level))
+                survey_id = cursor.lastrowid
+                print(f"✅ Created new survey (ID: {survey_id}) for user {user_id}")
+            
+            conn.commit()
+        except Exception as db_error:
+            conn.rollback()
+            print(f"❌ Database error: {db_error}")
+            raise db_error
+        finally:
+            conn.close()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Survey submitted successfully',
+            'survey_id': survey_id,
+            'scores': {
+                'ess': {
+                    'score': ess_score,
+                    'category': ess_category
+                },
+                'berlin': {
+                    'score': berlin_score,
+                    'category': berlin_category
+                },
+                'stopbang': {
+                    'score': stopbang_score,
+                    'category': stopbang_category
+                }
+            },
+            'prediction': {
+                'osa_probability': round(osa_probability, 3),
+                'risk_level': risk_level,
+                'recommendation': recommendation
+            },
+            'top_risk_factors': top_factors,
+            'calculated_metrics': {
+                'bmi': round(bmi, 1),
+                'estimated_activity_level': activity_level,
+                'estimated_sleep_quality': sleep_quality
+            }
+        }), 201
+        
+    except Exception as e:
+        print(f"❌ ERROR in submit_survey: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'error': str(e),
+            'success': False,
+            'details': traceback.format_exc()
+        }), 500
+
+
+@app.route('/predict', methods=['POST'])
+def predict_osa_risk():
+    """
+    Predict OSA risk based on user input
+    
+    Expected JSON input:
+    {
+        "Age": 45,
+        "Sex": 1,  # 1=Male, 0=Female
+        "BMI": 31.5,
+        "Neck_Circumference": 42,
+        "Hypertension": 1,  # 1=Yes, 0=No
+        "Diabetes": 0,
+        "Smokes": 0,
+        "Alcohol": 1,
+        "Snoring": 1,
+        "Sleepiness": 1,
+        "Epworth_Score": 14,
+        "Berlin_Score": 1,  # 1=High, 0=Low
+        "STOPBANG_Total": 5,
+        "SleepQuality_Proxy_0to10": 4,
+        "Sleep_Duration": 6.5,  # hours
+        "Physical_Activity_Level": 2,  # 1-10 scale
+        "Daily_Steps": 8000
+    }
+    """
+    if model is None or scaler is None:
+        return jsonify({
+            'error': 'Model not loaded. Please train the model first.',
+            'success': False
+        }), 500
+    
+    try:
+        # Get JSON data from request
+        data = request.get_json()
+        
+        # Validate all required features are present
+        missing_features = [f for f in FEATURES if f not in data]
+        if missing_features:
+            return jsonify({
+                'error': f'Missing required features: {missing_features}',
+                'success': False
+            }), 400
+        
+        # Create DataFrame with correct feature order
+        X_input = pd.DataFrame([{f: data[f] for f in FEATURES}])
+        
+        # Scale numerical columns
+        X_input[NUM_COLS] = scaler.transform(X_input[NUM_COLS])
+        
+        # Get prediction probability
+        y_prob = model.predict_proba(X_input)[:, 1][0]
+        y_pred = int(y_prob >= 0.5)
+        
+        # Determine risk level
+        if y_prob < 0.3:
+            risk_level = "Low Risk"
+            recommendation = "Your OSA risk is low. Continue maintaining healthy sleep habits."
+        elif y_prob < 0.6:
+            risk_level = "Moderate Risk"
+            recommendation = "You have moderate OSA risk. Consider consulting a sleep specialist."
+        else:
+            risk_level = "High Risk"
+            recommendation = "You have high OSA risk. We strongly recommend consulting a sleep specialist soon."
+        
+        # Return prediction result
+        return jsonify({
+            'success': True,
+            'prediction': {
+                'osa_probability': round(float(y_prob), 3),
+                'osa_class': y_pred,
+                'risk_level': risk_level,
+                'recommendation': recommendation
+            },
+            'input_summary': {
+                'age': data['Age'],
+                'bmi': data['BMI'],
+                'stopbang_score': data['STOPBANG_Total'],
+                'epworth_score': data['Epworth_Score'],
+                'sleep_duration': data['Sleep_Duration'],
+                'daily_steps': data['Daily_Steps']
+            },
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'success': False
+        }), 500
+
+
+@app.route('/survey/calculate', methods=['POST'])
+def calculate_survey_scores():
+    """
+    Calculate survey scores (ESS, Berlin, STOP-BANG) without prediction.
+    
+    Expected JSON input:
+    {
+        "ess_responses": [2, 1, 2, 1, 2, 1, 2, 1],  # 8 values 0-3
+        "berlin_category1": {"item2": true, "item3": false, ...},
+        "berlin_category2": {"item7": true, ...},
+        "berlin_category3_sleepy": true,
+        "bmi": 28.5,
+        "age": 45,
+        "neck_circumference": 37.5,
+        "male": true,
+        "snoring": true,
+        "tired": true,
+        "observed_apnea": false,
+        "hypertension": true
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        # Calculate ESS
+        ess_responses = data.get('ess_responses', [])
+        ess_score, ess_category = calculate_ess_score(ess_responses)
+        
+        # Calculate Berlin
+        berlin_cat1 = data.get('berlin_category1', {})
+        berlin_cat2 = data.get('berlin_category2', {})
+        berlin_cat3_sleepy = data.get('berlin_category3_sleepy', False)
+        bmi = data.get('bmi', 25.0)
+        berlin_score, berlin_category = calculate_berlin_score(berlin_cat1, berlin_cat2, berlin_cat3_sleepy, bmi)
+        
+        # Calculate STOP-BANG
+        age = data.get('age', 30)
+        neck_circumference = data.get('neck_circumference', 37.0)
+        male = data.get('male', True)
+        snoring = data.get('snoring', False)
+        tired = data.get('tired', False)
+        observed_apnea = data.get('observed_apnea', False)
+        hypertension = data.get('hypertension', False)
+        
+        stopbang_score, stopbang_category = calculate_stopbang_score(
+            snoring, tired, observed_apnea, hypertension,
+            age, neck_circumference, bmi, male
+        )
+        
+        # Calculate overall risk
+        high_risk_count = 0
+        if "Severe" in ess_category or "Moderate" in ess_category:
+            high_risk_count += 1
+        if berlin_category == "High Risk":
+            high_risk_count += 1
+        if stopbang_category == "High Risk":
+            high_risk_count += 1
+        
+        overall_risk = "High" if high_risk_count >= 2 else ("Moderate" if high_risk_count >= 1 else "Low")
+        
+        return jsonify({
+            'success': True,
+            'survey_scores': {
+                'ess': {
+                    'score': ess_score,
+                    'category': ess_category
+                },
+                'berlin': {
+                    'score': berlin_score,
+                    'category': berlin_category
+                },
+                'stopbang': {
+                    'score': stopbang_score,
+                    'category': stopbang_category
+                },
+                'overall_risk_level': overall_risk
+            },
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'success': False
+        }), 500
+
+
+@app.route('/predict-from-google-fit', methods=['POST'])
+def predict_from_google_fit():
+    """
+    Simplified prediction endpoint that accepts Google Fit data
+    and fills in default/estimated values for medical history
+    
+    Expected JSON input:
+    {
+        "age": 45,
+        "sex": "male",  # or "female"
+        "height_cm": 175,
+        "weight_kg": 85,
+        "neck_circumference_cm": 42,
+        "sleep_duration_hours": 6.5,
+        "daily_steps": 8000,
+        "snores": true,
+        "feels_sleepy": true,
+        # Optional medical history
+        "hypertension": false,
+        "diabetes": false,
+        "smokes": false,
+        "alcohol": false
+    }
+    """
+    if model is None or scaler is None:
+        return jsonify({
+            'error': 'Model not loaded. Please train the model first.',
+            'success': False
+        }), 500
+    
+    try:
+        data = request.get_json()
+        
+        # Calculate BMI
+        height_m = data['height_cm'] / 100
+        bmi = data['weight_kg'] / (height_m ** 2)
+        
+        # Convert sex to binary
+        sex = 1 if data['sex'].lower() == 'male' else 0
+        
+        # Calculate STOP-Bang components
+        sb_snore = 1 if data.get('snores', False) else 0
+        sb_tired = 1 if data.get('feels_sleepy', False) else 0
+        sb_pressure = 1 if data.get('hypertension', False) else 0
+        sb_bmi = 1 if bmi > 35 else 0
+        sb_age = 1 if data['age'] > 50 else 0
+        sb_neck = 1 if data['neck_circumference_cm'] >= 40 else 0
+        sb_male = sex
+        
+        stopbang_total = sb_snore + sb_tired + sb_pressure + sb_bmi + sb_age + sb_neck + sb_male
+        
+        # Estimate Epworth score (simplified)
+        epworth_score = 12 if data.get('feels_sleepy', False) else 6
+        
+        # Estimate Berlin score based on snoring and sleepiness
+        berlin_score = 1 if (data.get('snores', False) and data.get('feels_sleepy', False)) else 0
+        
+        # Estimate sleep quality (inverse of sleepiness)
+        sleep_quality = 5 if data.get('feels_sleepy', False) else 7
+        
+        # Estimate physical activity level from steps
+        steps = data['daily_steps']
+        if steps < 5000:
+            activity_level = 3
+        elif steps < 10000:
+            activity_level = 5
+        else:
+            activity_level = 8
+        
+        # Build feature dictionary
+        input_features = {
+            'Age': data['age'],
+            'Sex': sex,
+            'BMI': bmi,
+            'Neck_Circumference': data['neck_circumference_cm'],
+            'Hypertension': 1 if data.get('hypertension', False) else 0,
+            'Diabetes': 1 if data.get('diabetes', False) else 0,
+            'Smokes': 1 if data.get('smokes', False) else 0,
+            'Alcohol': 1 if data.get('alcohol', False) else 0,
+            'Snoring': sb_snore,
+            'Sleepiness': 1 if data.get('feels_sleepy', False) else 0,
+            'Epworth_Score': epworth_score,
+            'Berlin_Score': berlin_score,
+            'STOPBANG_Total': stopbang_total,
+            'SleepQuality_Proxy_0to10': sleep_quality,
+            'Sleep_Duration': data['sleep_duration_hours'],
+            'Physical_Activity_Level': activity_level,
+            'Daily_Steps': steps
+        }
+        
+        # Create DataFrame
+        X_input = pd.DataFrame([{f: input_features[f] for f in FEATURES}])
+        
+        # Scale numerical columns
+        X_input[NUM_COLS] = scaler.transform(X_input[NUM_COLS])
+        
+        # Get prediction
+        y_prob = model.predict_proba(X_input)[:, 1][0]
+        y_pred = int(y_prob >= 0.5)
+        
+        # Determine risk level
+        if y_prob < 0.3:
+            risk_level = "Low Risk"
+            recommendation = "Your OSA risk is low. Continue maintaining healthy sleep habits."
+        elif y_prob < 0.6:
+            risk_level = "Moderate Risk"
+            recommendation = "You have moderate OSA risk. Consider consulting a sleep specialist."
+        else:
+            risk_level = "High Risk"
+            recommendation = "You have high OSA risk. We strongly recommend consulting a sleep specialist soon."
+        
+        return jsonify({
+            'success': True,
+            'prediction': {
+                'osa_probability': round(float(y_prob), 3),
+                'osa_class': y_pred,
+                'risk_level': risk_level,
+                'recommendation': recommendation
+            },
+            'calculated_metrics': {
+                'bmi': round(bmi, 1),
+                'stopbang_score': stopbang_total,
+                'estimated_epworth_score': epworth_score,
+                'estimated_activity_level': activity_level
+            },
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except KeyError as e:
+        return jsonify({
+            'error': f'Missing required field: {str(e)}',
+            'success': False
+        }), 400
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'success': False
+        }), 500
+
+
+if __name__ == '__main__':
+    print("🚀 Starting WakeUp Call OSA Prediction API...")
+    print(f"📊 Model loaded: {model is not None}")
+    print(f"📏 Scaler loaded: {scaler is not None and hasattr(scaler, 'transform')} (not required for LightGBM)")
+    app.run(host='0.0.0.0', port=5000, debug=True)
