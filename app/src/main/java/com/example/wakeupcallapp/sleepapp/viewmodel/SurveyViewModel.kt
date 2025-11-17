@@ -229,7 +229,7 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
     
     // ============ SUBMIT SURVEY ============
     
-    fun submitSurvey(authToken: String) {
+    fun submitSurvey(authToken: String, googleFitViewModel: com.example.wakeupcallapp.sleepapp.viewmodel.GoogleFitViewModel? = null) {
         viewModelScope.launch {
             _isSubmitting.value = true
             _errorMessage.value = null
@@ -241,6 +241,7 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
                 android.util.Log.d("SurveyViewModel", "Medical: hypertension=${_hypertension.value}, diabetes=${_diabetes.value}, smokes=${_smokes.value}, alcohol=${_alcohol.value}")
                 android.util.Log.d("SurveyViewModel", "ESS: ${_essResponses.value}")
                 android.util.Log.d("SurveyViewModel", "Sleep: hours=${_sleepHours.value}, snores=${_snores.value}, observedApnea=${_observedApnea.value}")
+                android.util.Log.d("SurveyViewModel", "Daily Steps: ${_dailySteps.value}")
                 
                 // Build demographics
                 val demographics = Demographics(
@@ -281,11 +282,28 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
                     stopbangResponses = stopbangResponses
                 )
                 
-                // Build Google Fit data
-                val googleFit = GoogleFitData(
-                    dailySteps = _dailySteps.value,
-                    sleepDurationHours = _sleepHours.value
-                )
+                // Build Google Fit data - include data from GoogleFitViewModel if available
+                val googleFit = if (googleFitViewModel != null) {
+                    val fitData = googleFitViewModel.fitData.value
+                    android.util.Log.d("SurveyViewModel", "📊 Google Fit data available: dailySteps=${fitData?.dailySteps}, sleepHours=${fitData?.sleepDurationHours}")
+                    
+                    GoogleFitData(
+                        dailySteps = _dailySteps.value,  // User input has priority
+                        averageDailySteps = fitData?.averageDailySteps ?: _dailySteps.value,
+                        sleepDurationHours = _sleepHours.value,
+                        weeklyStepsData = fitData?.weeklyStepsData ?: emptyMap(),
+                        weeklySleepData = fitData?.weeklySleepData ?: emptyMap(),
+                        lastSyncTime = fitData?.lastSyncTime ?: System.currentTimeMillis()
+                    )
+                } else {
+                    android.util.Log.d("SurveyViewModel", "⚠️ Google Fit ViewModel not provided, using minimal data")
+                    GoogleFitData(
+                        dailySteps = _dailySteps.value,
+                        sleepDurationHours = _sleepHours.value
+                    )
+                }
+                
+                android.util.Log.d("SurveyViewModel", "📤 Submitting survey with complete Google Fit data...")
                 
                 // Submit to backend
                 val result = repository.submitSurvey(
@@ -444,6 +462,28 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
             } finally {
                 _isLoadingSurvey.value = false
                 android.util.Log.d("SurveyViewModel", "🔵 loadExistingSurvey FINISHED")
+            }
+        }
+    }
+    
+    /**
+     * Download PDF report from Flask backend
+     */
+    fun downloadReport(authToken: String, onComplete: (java.io.File?) -> Unit) {
+        viewModelScope.launch {
+            try {
+                android.util.Log.d("SurveyViewModel", "📥 Downloading report from backend...")
+                
+                repository.downloadReport(authToken).onSuccess { file ->
+                    android.util.Log.d("SurveyViewModel", "✅ Report downloaded successfully: ${file.absolutePath}")
+                    onComplete(file)
+                }.onFailure { error ->
+                    android.util.Log.e("SurveyViewModel", "❌ Failed to download report: ${error.message}")
+                    onComplete(null)
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("SurveyViewModel", "❌ Exception downloading report: ${e.message}")
+                onComplete(null)
             }
         }
     }

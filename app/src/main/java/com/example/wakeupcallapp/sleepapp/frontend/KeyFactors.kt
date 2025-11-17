@@ -104,19 +104,42 @@ fun KeyFactorsScreen(
                     )
 
                     Spacer(modifier = Modifier.height(20.dp))
-                    if (topRiskFactors != null && topRiskFactors.isNotEmpty()) {
-                        topRiskFactors.forEachIndexed { index, factor ->
-                            val icon = when {
-                                factor.factor.contains("BMI", ignoreCase = true) -> "👤"
-                                factor.factor.contains("snor", ignoreCase = true) -> "😴"
-                                factor.factor.contains("sleep", ignoreCase = true) -> "🛏️"
-                                factor.factor.contains("age", ignoreCase = true) -> "🎂"
-                                factor.factor.contains("neck", ignoreCase = true) -> "📏"
-                                else -> "⚠️"
-                            }
-                            val isPositive = factor.priority.lowercase() != "high"
-                            KeyFactorItem(icon = icon, title = factor.factor, isPositive = isPositive)
-                            if (index < topRiskFactors.size - 1) {
+                    
+                    val demographics = submissionResult?.demographics
+                    val scores = submissionResult?.scores
+                    
+                    if (demographics != null && scores != null) {
+                        // Determine top 3 SHAP factors based on impact
+                        val shapFactors = mutableListOf<Triple<String, String, Float>>()
+                        
+                        // Calculate impact scores for each factor
+                        val ageImpact = if (demographics.age >= 50) 0.75f else 0.40f
+                        shapFactors.add(Triple("🎂", "Age", ageImpact))
+                        
+                        val snoringImpact = if (scores.stopbang.score >= 1) 0.85f else 0.25f
+                        shapFactors.add(Triple("😴", "Snoring", snoringImpact))
+                        
+                        val stopbangImpact = (scores.stopbang.score.toFloat() / 8f) * 0.9f + 0.1f
+                        shapFactors.add(Triple("📊", "STOP-BANG", stopbangImpact))
+                        
+                        val neckImpact = when {
+                            demographics.neckCircumferenceCm >= 43 -> 0.90f
+                            demographics.neckCircumferenceCm >= 40 -> 0.70f
+                            demographics.neckCircumferenceCm >= 37 -> 0.50f
+                            else -> 0.30f
+                        }
+                        shapFactors.add(Triple("📏", "Neck Circumference", neckImpact))
+                        
+                        val essImpact = (scores.ess.score.toFloat() / 24f) * 0.9f + 0.1f
+                        shapFactors.add(Triple("💤", "ESS Score", essImpact))
+                        
+                        // Sort by impact and take top 3
+                        val topShapFactors = shapFactors.sortedByDescending { it.third }.take(3)
+                        
+                        topShapFactors.forEachIndexed { index, factor ->
+                            val isPositive = factor.third < 0.60f
+                            KeyFactorItem(icon = factor.first, title = factor.second, isPositive = isPositive)
+                            if (index < topShapFactors.size - 1) {
                                 Spacer(modifier = Modifier.height(12.dp))
                             }
                         }
@@ -161,16 +184,46 @@ fun KeyFactorsScreen(
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    if (topRiskFactors != null && topRiskFactors.isNotEmpty()) {
-                        topRiskFactors.forEachIndexed { index, factor ->
-                            val impactValue = when(factor.priority.lowercase()) {
-                                "high" -> 0.85f
-                                "medium" -> 0.60f
-                                "low" -> 0.35f
-                                else -> 0.50f
-                            }
-                            ShapFeatureBar(factor.factor, impactValue)
-                            if (index < topRiskFactors.size - 1) {
+                    val demographics = submissionResult?.demographics
+                    val scores = submissionResult?.scores
+                    
+                    if (demographics != null && scores != null) {
+                        // Calculate impact for each factor
+                        val ageImpact = if (demographics.age >= 50) 0.75f else 0.40f
+                        ShapFeatureBar("Age", ageImpact)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        val snoringProgress = if (scores.stopbang.score >= 1) 0.85f else 0.25f
+                        ShapFeatureBar("Snoring", snoringProgress)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        val stopbangProgress = (scores.stopbang.score.toFloat() / 8f) * 0.9f + 0.1f
+                        ShapFeatureBar("STOP-BANG", stopbangProgress)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        val neckProgress = when {
+                            demographics.neckCircumferenceCm >= 43 -> 0.90f
+                            demographics.neckCircumferenceCm >= 40 -> 0.70f
+                            demographics.neckCircumferenceCm >= 37 -> 0.50f
+                            else -> 0.30f
+                        }
+                        ShapFeatureBar("Neck Circumference", neckProgress)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        val essProgress = (scores.ess.score.toFloat() / 24f) * 0.9f + 0.1f
+                        ShapFeatureBar("ESS Score", essProgress)
+                        
+                        // Show additional top risk factors if available
+                        if (topRiskFactors != null && topRiskFactors.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            topRiskFactors.take(3).forEach { factor ->
+                                val impactValue = when(factor.priority.lowercase()) {
+                                    "high" -> 0.85f
+                                    "medium" -> 0.60f
+                                    "low" -> 0.35f
+                                    else -> 0.50f
+                                }
+                                ShapFeatureBar(factor.factor, impactValue)
                                 Spacer(modifier = Modifier.height(12.dp))
                             }
                         }

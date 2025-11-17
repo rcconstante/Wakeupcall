@@ -346,31 +346,51 @@ fun DashboardScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    val topRiskFactors = submissionResult?.topRiskFactors
-                    if (topRiskFactors != null && topRiskFactors.isNotEmpty()) {
-                        topRiskFactors.forEachIndexed { index, factor ->
-                            val icon = when {
-                                factor.factor.contains("BMI", ignoreCase = true) -> "👤"
-                                factor.factor.contains("snor", ignoreCase = true) -> "😴"
-                                factor.factor.contains("sleep", ignoreCase = true) -> "🛏️"
-                                factor.factor.contains("age", ignoreCase = true) -> "🎂"
-                                factor.factor.contains("neck", ignoreCase = true) -> "📏"
-                                else -> "⚠️"
-                            }
+                    val demographics = submissionResult?.demographics
+                    val scores = submissionResult?.scores
+                    
+                    if (demographics != null && scores != null) {
+                        // Calculate top 2-3 SHAP factors (same logic as KeyFactors.kt)
+                        val shapFactors = mutableListOf<Triple<String, String, Float>>()
+                        
+                        val ageImpact = if (demographics.age >= 50) 0.75f else 0.40f
+                        shapFactors.add(Triple("🎂", "Age", ageImpact))
+                        
+                        val snoringImpact = if (scores.stopbang.score >= 1) 0.85f else 0.25f
+                        shapFactors.add(Triple("😴", "Snoring", snoringImpact))
+                        
+                        val stopbangImpact = (scores.stopbang.score.toFloat() / 8f) * 0.9f + 0.1f
+                        shapFactors.add(Triple("📊", "STOP-BANG", stopbangImpact))
+                        
+                        val neckImpact = when {
+                            demographics.neckCircumferenceCm >= 43 -> 0.90f
+                            demographics.neckCircumferenceCm >= 40 -> 0.70f
+                            demographics.neckCircumferenceCm >= 37 -> 0.50f
+                            else -> 0.30f
+                        }
+                        shapFactors.add(Triple("📏", "Neck Circumference", neckImpact))
+                        
+                        val essImpact = (scores.ess.score.toFloat() / 24f) * 0.9f + 0.1f
+                        shapFactors.add(Triple("💤", "ESS Score", essImpact))
+                        
+                        // Sort by impact and take top 3
+                        val topShapFactors = shapFactors.sortedByDescending { it.third }.take(3)
+                        
+                        topShapFactors.forEachIndexed { index, factor ->
                             KeyFactorCard(
-                                icon = icon,
-                                title = factor.factor,
-                                description = "Impact: ${factor.impact}"
+                                icon = factor.first,
+                                title = factor.second,
+                                description = ""
                             )
-                            if (index < topRiskFactors.size - 1) {
+                            if (index < topShapFactors.size - 1) {
                                 Spacer(modifier = Modifier.height(12.dp))
                             }
                         }
                     } else {
                         // Default factors when no data available
                         KeyFactorCard(
-                            icon = "👤",
-                            title = "BMI",
+                            icon = "🎂",
+                            title = "Age",
                             description = "Complete questionnaire to see factors"
                         )
                         Spacer(modifier = Modifier.height(12.dp))
@@ -381,8 +401,8 @@ fun DashboardScreen(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         KeyFactorCard(
-                            icon = "🛏️",
-                            title = "Sleep Duration",
+                            icon = "📊",
+                            title = "STOP-BANG",
                             description = ""
                         )
                     }
@@ -425,7 +445,10 @@ fun DashboardScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    if (fitData != null) {
+                    val hasValidData = fitData != null && 
+                        (fitData!!.averageDailySteps > 0 || fitData!!.sleepDurationHours > 0.0)
+                    
+                    if (hasValidData) {
                         // Daily Steps Chart
                         Text(
                             text = "Daily Steps",
@@ -488,7 +511,11 @@ fun DashboardScreen(
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                    text = if (isFitConnected) "Loading data..." else "Connect Google Fit",
+                                    text = when {
+                                        !isFitConnected -> "Connect Google Fit"
+                                        fitData == null -> "Loading data..."
+                                        else -> "No data yet"
+                                    },
                                     fontSize = 14.sp,
                                     color = Color.White.copy(alpha = 0.6f)
                                 )
@@ -496,6 +523,13 @@ fun DashboardScreen(
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Text(
                                         text = "Visit Profile to connect",
+                                        fontSize = 12.sp,
+                                        color = Color.White.copy(alpha = 0.5f)
+                                    )
+                                } else if (fitData != null) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Google Fit has no data available",
                                         fontSize = 12.sp,
                                         color = Color.White.copy(alpha = 0.5f)
                                     )

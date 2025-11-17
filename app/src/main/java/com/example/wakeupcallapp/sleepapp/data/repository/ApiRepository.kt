@@ -162,4 +162,96 @@ class ApiRepository {
             Result.failure(e)
         }
     }
+    
+    // ============ PDF REPORT GENERATION ============
+    
+    suspend fun downloadReport(token: String): Result<java.io.File> = withContext(Dispatchers.IO) {
+        try {
+            if (token.isBlank()) {
+                return@withContext Result.failure(Exception("Not authenticated"))
+            }
+            
+            android.util.Log.d("ApiRepository", "📥 Requesting PDF report from backend...")
+            val response = apiService.downloadReport("Bearer $token")
+            
+            android.util.Log.d("ApiRepository", "📡 Response code: ${response.code()}")
+            android.util.Log.d("ApiRepository", "📡 Response successful: ${response.isSuccessful}")
+            android.util.Log.d("ApiRepository", "📡 Response body null: ${response.body() == null}")
+            
+            if (response.isSuccessful && response.body() != null) {
+                val responseBody = response.body()!!
+                
+                // Determine file extension from Content-Type header
+                val contentType = response.headers()["Content-Type"] ?: "application/pdf"
+                val contentLength = response.headers()["Content-Length"]?.toLongOrNull() ?: 0L
+                val fileExtension = when {
+                    contentType.contains("pdf") -> ".pdf"
+                    contentType.contains("wordprocessingml") -> ".docx"
+                    else -> ".pdf"
+                }
+                
+                android.util.Log.d("ApiRepository", "📄 Content-Type: $contentType, Extension: $fileExtension")
+                android.util.Log.d("ApiRepository", "📏 Content-Length: $contentLength bytes")
+                
+                // Save to temporary file with buffered writing
+                val tempFile = java.io.File.createTempFile("WakeUpCall_Report_", fileExtension)
+                android.util.Log.d("ApiRepository", "💾 Saving to: ${tempFile.absolutePath}")
+                
+                try {
+                    var bytesWritten = 0L
+                    val buffer = ByteArray(8192) // 8KB buffer
+                    
+                    tempFile.outputStream().buffered().use { output ->
+                        responseBody.byteStream().buffered().use { input ->
+                            var bytesRead: Int
+                            while (input.read(buffer).also { bytesRead = it } != -1) {
+                                output.write(buffer, 0, bytesRead)
+                                bytesWritten += bytesRead
+                                
+                                // Log progress every 50KB
+                                if (bytesWritten % 50000 == 0L) {
+                                    val progress = if (contentLength > 0) {
+                                        (bytesWritten * 100 / contentLength)
+                                    } else {
+                                        0
+                                    }
+                                    android.util.Log.d("ApiRepository", "⬇️ Downloaded: $bytesWritten bytes ($progress%)")
+                                }
+                            }
+                            output.flush()
+                        }
+                    }
+                    
+                    android.util.Log.d("ApiRepository", "✅ Report saved: ${tempFile.absolutePath}")
+                    android.util.Log.d("ApiRepository", "📊 Downloaded: $bytesWritten bytes, On disk: ${tempFile.length()} bytes")
+                    android.util.Log.d("ApiRepository", "📂 File exists: ${tempFile.exists()}")
+                    
+                    if (tempFile.length() == 0L) {
+                        android.util.Log.e("ApiRepository", "❌ File is empty!")
+                        Result.failure(Exception("Downloaded file is empty"))
+                    } else if (contentLength > 0 && tempFile.length() != contentLength) {
+                        android.util.Log.e("ApiRepository", "⚠️ Size mismatch! Expected: $contentLength, Got: ${tempFile.length()}")
+                        Result.failure(Exception("Incomplete download: expected $contentLength bytes, got ${tempFile.length()} bytes"))
+                    } else {
+                        Result.success(tempFile)
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("ApiRepository", "❌ Error writing file: ${e.message}", e)
+                    if (tempFile.exists()) {
+                        tempFile.delete()
+                    }
+                    throw e
+                }
+            } else {
+                val errorBody = response.errorBody()?.string()
+                android.util.Log.e("ApiRepository", "❌ Failed to download report: ${response.code()}")
+                android.util.Log.e("ApiRepository", "❌ Error message: ${response.message()}")
+                android.util.Log.e("ApiRepository", "❌ Error body: $errorBody")
+                Result.failure(Exception("Failed to download report: ${response.message()}"))
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("ApiRepository", "❌ Exception downloading report: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
 }

@@ -43,6 +43,7 @@ class FatigueSleepiness5 : ComponentActivity() {
 fun FatigueSleepiness5ScreenContent(
     surveyViewModel: SurveyViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity),
     authViewModel: AuthViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity),
+    googleFitViewModel: com.example.wakeupcallapp.sleepapp.viewmodel.GoogleFitViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity),
     onNext: () -> Unit = {},
     onBack: () -> Unit = {}
 ) {
@@ -169,7 +170,7 @@ fun FatigueSleepiness5ScreenContent(
                                 authToken?.let { token ->
                                     android.util.Log.d("FatigueSleepiness5", "🚀 Submitting survey with token: ${token.take(20)}...")
                                     hasSubmittedFromThisScreen = true
-                                    surveyViewModel.submitSurvey(token)
+                                    surveyViewModel.submitSurvey(token, googleFitViewModel)
                                 } ?: android.util.Log.e("FatigueSleepiness5", "❌ No auth token available!")
                             }
                         },

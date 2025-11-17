@@ -43,10 +43,24 @@ class HealthHistory2 : ComponentActivity() {
 @Composable
 fun HealthHistory2ScreenContent(
     surveyViewModel: SurveyViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity),
+    googleFitViewModel: com.example.wakeupcallapp.sleepapp.viewmodel.GoogleFitViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity),
     onNext: () -> Unit = {},
     onBack: () -> Unit = {}
 ) {
-    var stepCount by remember { mutableStateOf("") }
+    // Get Google Fit data
+    val fitData by googleFitViewModel.fitData.collectAsState()
+    val currentDailySteps by surveyViewModel.dailySteps.collectAsState()
+    
+    // Initialize with Google Fit data or default, then allow user override
+    var stepCount by remember(fitData, currentDailySteps) { 
+        mutableStateOf(
+            when {
+                fitData != null && fitData!!.dailySteps > 0 -> fitData!!.dailySteps.toString()
+                currentDailySteps > 0 -> currentDailySteps.toString()
+                else -> ""
+            }
+        )
+    }
     var activityMinutes by remember { mutableStateOf("") }
     var activityType1 by remember { mutableStateOf("") }
     var activityType2 by remember { mutableStateOf("") }

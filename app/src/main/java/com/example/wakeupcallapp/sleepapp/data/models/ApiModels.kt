@@ -78,7 +78,11 @@ data class StopBangResponses(
 
 data class GoogleFitData(
     @SerializedName("daily_steps") val dailySteps: Int,
-    @SerializedName("sleep_duration_hours") val sleepDurationHours: Double
+    @SerializedName("average_daily_steps") val averageDailySteps: Int = dailySteps,
+    @SerializedName("sleep_duration_hours") val sleepDurationHours: Double,
+    @SerializedName("weekly_steps_data") val weeklyStepsData: Map<String, Int> = emptyMap(),
+    @SerializedName("weekly_sleep_data") val weeklySleepData: Map<String, Double> = emptyMap(),
+    @SerializedName("last_sync_time") val lastSyncTime: Long = System.currentTimeMillis()
 )
 
 // ============ SURVEY RESPONSE MODELS ============

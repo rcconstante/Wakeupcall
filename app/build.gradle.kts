@@ -78,6 +78,9 @@ dependencies {
     // Accompanist SwipeRefresh for pull-to-refresh
     implementation("com.google.accompanist:accompanist-swiperefresh:0.32.0")
 
+    // PDF Generation - iText7 Core for creating PDFs
+    implementation("com.itextpdf:itext7-core:7.2.5")
+
     // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

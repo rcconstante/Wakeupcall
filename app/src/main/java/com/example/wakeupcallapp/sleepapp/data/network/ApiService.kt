@@ -40,4 +40,12 @@ interface ApiService {
     
     @GET("/")
     suspend fun healthCheck(): Response<Map<String, Any>>
+    
+    // ============ PDF REPORT GENERATION ============
+    
+    @POST("survey/generate-pdf")
+    @Streaming
+    suspend fun downloadReport(
+        @Header("Authorization") token: String
+    ): Response<okhttp3.ResponseBody>
 }

@@ -26,17 +26,29 @@ import androidx.navigation.compose.rememberNavController
 import com.example.wakeupcallapp.sleepapp.R
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.wakeupcallapp.sleepapp.viewmodel.SurveyViewModel
+import com.example.wakeupcallapp.sleepapp.viewmodel.AuthViewModel
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import android.widget.Toast
+import android.content.Intent
+import androidx.core.content.FileProvider
+import com.example.wakeupcallapp.sleepapp.utils.PDFReportGenerator
+import android.util.Log
 
 @Composable
 fun RecommendationsScreen(
     navController: NavController,
-    surveyViewModel: SurveyViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity)
+    surveyViewModel: SurveyViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity),
+    authViewModel: AuthViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity)
 ) {
     val submissionResult by surveyViewModel.submissionResult.collectAsState()
+    val currentUser by authViewModel.currentUser.collectAsState()
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     
     Box(modifier = Modifier.fillMaxSize()) {
         // Background Image
@@ -150,7 +162,70 @@ fun RecommendationsScreen(
 
             // Download Summary Button
             Button(
-                onClick = { /* Handle download */ },
+                onClick = {
+                    coroutineScope.launch {
+                        try {
+                            val user = currentUser
+                            val result = submissionResult
+                            
+                            if (user == null) {
+                                Toast.makeText(context, "Please log in to download report", Toast.LENGTH_SHORT).show()
+                                return@launch
+                            }
+                            
+                            if (result == null) {
+                                Toast.makeText(context, "No survey data available", Toast.LENGTH_SHORT).show()
+                                return@launch
+                            }
+                            
+                            Log.d("RecommendationsScreen", "📄 Downloading report from server...")
+                            Toast.makeText(context, "Generating report...", Toast.LENGTH_SHORT).show()
+                            
+                            val authToken = authViewModel.authToken.value
+                            if (authToken == null) {
+                                Toast.makeText(context, "Authentication required", Toast.LENGTH_SHORT).show()
+                                return@launch
+                            }
+                            
+                            // Call backend API to generate report
+                            surveyViewModel.downloadReport(authToken) { file ->
+                                if (file != null) {
+                                    Log.d("RecommendationsScreen", "✅ Report downloaded: ${file.absolutePath}")
+                                    
+                                    // Share the file
+                                    val uri = FileProvider.getUriForFile(
+                                        context,
+                                        "${context.packageName}.fileprovider",
+                                        file
+                                    )
+                                    
+                                    // Determine MIME type based on file extension
+                                    val mimeType = when {
+                                        file.name.endsWith(".pdf", ignoreCase = true) -> "application/pdf"
+                                        file.name.endsWith(".docx", ignoreCase = true) -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                        else -> "*/*"
+                                    }
+                                    
+                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                        type = mimeType
+                                        putExtra(Intent.EXTRA_STREAM, uri)
+                                        putExtra(Intent.EXTRA_SUBJECT, "WakeUpCall Sleep Apnea Report")
+                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    
+                                    context.startActivity(Intent.createChooser(shareIntent, "Share Report"))
+                                    Toast.makeText(context, "Report generated successfully!", Toast.LENGTH_LONG).show()
+                                } else {
+                                    Toast.makeText(context, "Failed to generate report", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                            
+                        } catch (e: Exception) {
+                            Log.e("RecommendationsScreen", "❌ Error: ${e.message}", e)
+                            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(60.dp),
