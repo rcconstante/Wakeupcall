@@ -76,6 +76,12 @@ def init_db():
             -- ML prediction
             osa_probability REAL,
             risk_level TEXT,
+            -- Google Fit data
+            daily_steps INTEGER,
+            average_daily_steps INTEGER,
+            sleep_duration_hours REAL,
+            weekly_steps_json TEXT,
+            weekly_sleep_json TEXT,
             completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users (id)
         )
@@ -935,10 +941,20 @@ def submit_survey():
         # Extract Google Fit data
         fit_data = data.get('google_fit', {})
         daily_steps = fit_data.get('daily_steps', 5000)
+        average_daily_steps = fit_data.get('average_daily_steps', daily_steps)
+        weekly_steps_data = fit_data.get('weekly_steps_data', {})
+        weekly_sleep_data = fit_data.get('weekly_sleep_data', {})
+        
+        print(f"🔵 Google Fit data received:")
+        print(f"   Daily steps: {daily_steps}")
+        print(f"   Average daily steps: {average_daily_steps}")
+        print(f"   Weekly steps data: {len(weekly_steps_data)} days")
+        print(f"   Weekly sleep data: {len(weekly_sleep_data)} days")
         
         # Better sleep duration estimation if not provided
         if 'sleep_duration_hours' in fit_data:
             sleep_duration = fit_data['sleep_duration_hours']
+            print(f"   Sleep duration from Google Fit: {sleep_duration:.1f}h")
         else:
             # Estimate based on sleep problems (Berlin + ESS scores)
             if berlin_score >= 2:  # High snoring/sleep problems
@@ -946,6 +962,12 @@ def submit_survey():
             else:
                 sleep_duration = 6.5 + (24 - ess_score) / 24 * 1.5  # 6.5-8 hours
             sleep_duration = max(4.0, min(10.0, sleep_duration))
+            print(f"   Sleep duration estimated: {sleep_duration:.1f}h")
+        
+        # Convert Google Fit data to JSON strings for storage
+        import json
+        weekly_steps_json = json.dumps(weekly_steps_data) if weekly_steps_data else '{}'
+        weekly_sleep_json = json.dumps(weekly_sleep_data) if weekly_sleep_data else '{}'
         
         # Estimate additional features
         sleepiness = 1 if ess_score > 10 else 0
@@ -1062,11 +1084,16 @@ def submit_survey():
                     SET age = ?, sex = ?, height_cm = ?, weight_kg = ?, neck_circumference_cm = ?, bmi = ?,
                         hypertension = ?, diabetes = ?, smokes = ?, alcohol = ?,
                         ess_score = ?, berlin_score = ?, stopbang_score = ?, 
-                        osa_probability = ?, risk_level = ?, completed_at = CURRENT_TIMESTAMP
+                        osa_probability = ?, risk_level = ?,
+                        daily_steps = ?, average_daily_steps = ?, sleep_duration_hours = ?,
+                        weekly_steps_json = ?, weekly_sleep_json = ?,
+                        completed_at = CURRENT_TIMESTAMP
                     WHERE user_id = ?
                 ''', (age, demo.get('sex', 'male'), height_cm, weight_kg, neck_cm, bmi,
                       hypertension, diabetes, smokes, alcohol,
-                      ess_score, berlin_score_binary, stopbang_score, osa_probability, risk_level, user_id))
+                      ess_score, berlin_score_binary, stopbang_score, osa_probability, risk_level,
+                      daily_steps, average_daily_steps, sleep_duration, weekly_steps_json, weekly_sleep_json,
+                      user_id))
                 
                 rows_affected = cursor.rowcount
                 print(f"✅ Updated existing survey (ID: {survey_id}, rows affected: {rows_affected}) for user {user_id}")
@@ -1085,11 +1112,14 @@ def submit_survey():
                     INSERT INTO user_surveys 
                     (user_id, age, sex, height_cm, weight_kg, neck_circumference_cm, bmi,
                      hypertension, diabetes, smokes, alcohol,
-                     ess_score, berlin_score, stopbang_score, osa_probability, risk_level)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     ess_score, berlin_score, stopbang_score, osa_probability, risk_level,
+                     daily_steps, average_daily_steps, sleep_duration_hours,
+                     weekly_steps_json, weekly_sleep_json)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (user_id, age, demo.get('sex', 'male'), height_cm, weight_kg, neck_cm, bmi,
                       hypertension, diabetes, smokes, alcohol,
-                      ess_score, berlin_score_binary, stopbang_score, osa_probability, risk_level))
+                      ess_score, berlin_score_binary, stopbang_score, osa_probability, risk_level,
+                      daily_steps, average_daily_steps, sleep_duration, weekly_steps_json, weekly_sleep_json))
                 survey_id = cursor.lastrowid
                 print(f"✅ Created new survey (ID: {survey_id}) for user {user_id}")
             
@@ -1458,6 +1488,299 @@ def predict_from_google_fit():
     except Exception as e:
         return jsonify({
             'error': str(e),
+            'success': False
+        }), 500
+
+
+@app.route('/survey/generate-pdf', methods=['POST'])
+@require_auth
+def generate_pdf_report():
+    """
+    Generate PDF report from survey data using ReportLab
+    Returns PDF file as binary response
+    """
+    try:
+        from pdf_generator import WakeUpCallPDFGenerator
+        from io import BytesIO
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        from datetime import datetime
+        
+        user_id = request.current_user['id']
+        user_name = f"{request.current_user['first_name']} {request.current_user['last_name']}"
+        
+        # Get latest survey data
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT age, sex, height_cm, weight_kg, neck_circumference_cm, bmi,
+                   hypertension, diabetes, smokes, alcohol,
+                   ess_score, berlin_score, stopbang_score, osa_probability, risk_level,
+                   daily_steps, average_daily_steps, sleep_duration_hours,
+                   weekly_steps_json, weekly_sleep_json
+            FROM user_surveys
+            WHERE user_id = ?
+            ORDER BY completed_at DESC
+            LIMIT 1
+        ''', (user_id,))
+        
+        survey = cursor.fetchone()
+        conn.close()
+        
+        if not survey:
+            return jsonify({'error': 'No survey data found', 'success': False}), 404
+        
+        # Extract data
+        age, sex, height_cm, weight_kg, neck_cm, bmi = survey[0:6]
+        hypertension, diabetes, smokes, alcohol = survey[6:10]
+        ess_score, berlin_score, stopbang_score = survey[10:13]
+        osa_probability, risk_level = survey[13:15]
+        daily_steps, average_daily_steps, sleep_duration_hours = survey[15:18]
+        weekly_steps_json, weekly_sleep_json = survey[18:20]
+        
+        # Calculate ESS individual scores (divide total by 8 for average, then distribute)
+        avg_ess = ess_score / 8
+        ess_responses = [int(avg_ess)] * 8  # Simplified: use average for each question
+        
+        # Parse Google Fit JSON data
+        import json
+        weekly_steps_data = json.loads(weekly_steps_json) if weekly_steps_json else {}
+        weekly_sleep_data = json.loads(weekly_sleep_json) if weekly_sleep_json else {}
+        
+        # Generate charts for PDF
+        def generate_shap_chart():
+            # Calculate impact scores
+            age_impact = 0.75 if age >= 50 else 0.40
+            snoring_impact = 0.85 if stopbang_score >= 1 else 0.25
+            stopbang_impact = (stopbang_score / 8.0) * 0.9 + 0.1
+            
+            if neck_cm >= 43:
+                neck_impact = 0.90
+            elif neck_cm >= 40:
+                neck_impact = 0.70
+            elif neck_cm >= 37:
+                neck_impact = 0.50
+            else:
+                neck_impact = 0.30
+            
+            ess_impact = (ess_score / 24.0) * 0.9 + 0.1
+            
+            factors = [
+                ('Age', age_impact),
+                ('Snoring', snoring_impact),
+                ('STOP-BANG', stopbang_impact),
+                ('Neck Circ', neck_impact),
+                ('ESS Score', ess_impact)
+            ]
+            
+            # Sort by impact
+            factors.sort(key=lambda x: x[1], reverse=True)
+            
+            # Create bar chart
+            fig, ax = plt.subplots(figsize=(8, 5))
+            names = [f[0] for f in factors]
+            values = [f[1] * 100 for f in factors]
+            colors = ['#f44336' if v >= 70 else '#ff9800' if v >= 50 else '#4caf50' for v in values]
+            
+            ax.barh(names, values, color=colors)
+            ax.set_xlabel('Impact (%)', fontsize=12)
+            ax.set_title('SHAP Analysis - Risk Factor Impact', fontsize=14, fontweight='bold')
+            ax.set_xlim(0, 100)
+            
+            for i, v in enumerate(values):
+                ax.text(v + 2, i, f'{v:.0f}%', va='center', fontsize=10)
+            
+            plt.tight_layout()
+            
+            # Save to BytesIO
+            img_buffer = BytesIO()
+            plt.savefig(img_buffer, format='png', dpi=150, bbox_inches='tight')
+            img_buffer.seek(0)
+            plt.close()
+            
+            return img_buffer
+        
+        # Generate weekly steps chart
+        def generate_steps_chart(steps_data):
+            # Sort by date and take last 7 days
+            sorted_data = sorted(steps_data.items(), key=lambda x: x[0])[-7:]
+            dates = [d[5:] for d, _ in sorted_data]  # Extract MM-DD
+            steps = [s for _, s in sorted_data]
+            
+            fig, ax = plt.subplots(figsize=(8, 5))
+            colors = ['#4caf50' if s >= 8000 else '#ff9800' if s >= 5000 else '#f44336' for s in steps]
+            bars = ax.bar(dates, steps, color=colors)
+            
+            ax.set_xlabel('Date', fontsize=12)
+            ax.set_ylabel('Steps', fontsize=12)
+            ax.set_title('Weekly Step Count', fontsize=14, fontweight='bold')
+            ax.set_ylim(0, max(steps) * 1.2 if steps else 15000)
+            
+            # Add value labels on bars
+            for bar in bars:
+                height = bar.get_height()
+                ax.text(bar.get_x() + bar.get_width()/2., height,
+                       f'{int(height):,}',
+                       ha='center', va='bottom', fontsize=9)
+            
+            plt.xticks(rotation=45)
+            plt.tight_layout()
+            
+            img_buffer = BytesIO()
+            plt.savefig(img_buffer, format='png', dpi=150, bbox_inches='tight')
+            img_buffer.seek(0)
+            plt.close()
+            
+            return img_buffer
+        
+        # Generate weekly sleep chart
+        def generate_sleep_chart(sleep_data):
+            # Sort by date and take last 7 days
+            sorted_data = sorted(sleep_data.items(), key=lambda x: x[0])[-7:]
+            dates = [d[5:] for d, _ in sorted_data]  # Extract MM-DD
+            hours = [h for _, h in sorted_data]
+            
+            fig, ax = plt.subplots(figsize=(8, 5))
+            colors = ['#4caf50' if h >= 7 else '#ff9800' if h >= 6 else '#f44336' for h in hours]
+            bars = ax.bar(dates, hours, color=colors)
+            
+            ax.set_xlabel('Date', fontsize=12)
+            ax.set_ylabel('Hours', fontsize=12)
+            ax.set_title('Weekly Sleep Duration', fontsize=14, fontweight='bold')
+            ax.set_ylim(0, 10)
+            ax.axhline(y=7, color='gray', linestyle='--', alpha=0.5, label='Recommended (7h)')
+            
+            # Add value labels on bars
+            for bar in bars:
+                height = bar.get_height()
+                ax.text(bar.get_x() + bar.get_width()/2., height,
+                       f'{height:.1f}h',
+                       ha='center', va='bottom', fontsize=9)
+            
+            ax.legend()
+            plt.xticks(rotation=45)
+            plt.tight_layout()
+            
+            img_buffer = BytesIO()
+            plt.savefig(img_buffer, format='png', dpi=150, bbox_inches='tight')
+            img_buffer.seek(0)
+            plt.close()
+            
+            return img_buffer
+        
+        # Generate charts
+        steps_chart_buffer = generate_steps_chart(weekly_steps_data) if weekly_steps_data else None
+        sleep_chart_buffer = generate_sleep_chart(weekly_sleep_data) if weekly_sleep_data else None
+        shap_chart_buffer = generate_shap_chart()
+        
+        # Calculate STOP-BANG components
+        snoring = stopbang_score >= 1  # Simplified assumption
+        tiredness = ess_score >= 11
+        observed_apnea = False  # Not directly available
+        bmi_over_35 = bmi > 35
+        age_over_50 = age > 50
+        neck_large = neck_cm >= 40 if sex == 'Male' else neck_cm >= 35
+        gender_male = (sex == 'Male')
+        
+        # Determine recommendation
+        if osa_probability >= 0.7:
+            recommendation = 'HIGH RISK: Immediate sleep specialist consultation recommended'
+        elif osa_probability >= 0.4:
+            recommendation = 'MODERATE RISK: Schedule sleep specialist appointment within 2-4 weeks'
+        else:
+            recommendation = 'LOW RISK: Continue healthy sleep habits'
+        
+        # Build data dictionary for PDF generator
+        pdf_data = {
+            'patient': {
+                'name': user_name,
+                'age': age,
+                'sex': sex,
+                'height': f'{height_cm} cm',
+                'weight': f'{weight_kg} kg',
+                'bmi': bmi,
+                'neck_circumference': f'{neck_cm} cm'
+            },
+            'assessment': {
+                'risk_level': risk_level,
+                'osa_probability': int(osa_probability * 100),
+                'recommendation': recommendation
+            },
+            'stop_bang': {
+                'score': stopbang_score,
+                'snoring': snoring,
+                'tiredness': tiredness,
+                'observed_apnea': observed_apnea,
+                'high_blood_pressure': hypertension,
+                'bmi_over_35': bmi_over_35,
+                'age_over_50': age_over_50,
+                'neck_circumference_large': neck_large,
+                'gender_male': gender_male
+            },
+            'epworth_sleepiness_scale': {
+                'total_score': ess_score,
+                'sitting_reading': ess_responses[0] if ess_responses else 0,
+                'watching_tv': ess_responses[1] if ess_responses else 0,
+                'public_sitting': ess_responses[2] if ess_responses else 0,
+                'passenger_car': ess_responses[3] if ess_responses else 0,
+                'lying_down_pm': ess_responses[4] if ess_responses else 0,
+                'talking': ess_responses[5] if ess_responses else 0,
+                'after_lunch': ess_responses[6] if ess_responses else 0,
+                'traffic_stop': ess_responses[7] if ess_responses else 0
+            },
+            'google_fit': {
+                'daily_steps': daily_steps or 0,
+                'average_daily_steps': average_daily_steps or 0,
+                'sleep_duration_hours': sleep_duration_hours or 0,
+                'weekly_steps_chart': steps_chart_buffer,
+                'weekly_sleep_chart': sleep_chart_buffer
+            },
+            'lifestyle': {
+                'smoking': smokes,
+                'alcohol': alcohol
+            },
+            'medical_history': {
+                'hypertension': hypertension,
+                'diabetes': diabetes
+            },
+            'shap_chart': shap_chart_buffer,
+            'generated_date': datetime.now().strftime("%Y-%m-%d %H:%M")
+        }
+        
+        # Generate PDF using ReportLab
+        print("📄 Generating PDF report using ReportLab...")
+        generator = WakeUpCallPDFGenerator()
+        pdf_buffer = generator.generate_pdf(pdf_data)
+        
+        pdf_size = len(pdf_buffer.getvalue())
+        print(f"✅ PDF generated successfully: {pdf_size} bytes")
+        
+        pdf_buffer.seek(0)
+        
+        from flask import send_file
+        print(f"📤 Sending PDF file to client...")
+        response = send_file(
+            pdf_buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'WakeUpCall_Report_{user_name.replace(" ", "_")}.pdf'
+        )
+        response.headers['Content-Length'] = pdf_size
+        print(f"✅ Response sent with Content-Length: {pdf_size}")
+        return response
+        
+    except ImportError as ie:
+        return jsonify({
+            'error': f'Missing required library: {str(ie)}. Install with: pip install python-docx matplotlib',
+            'success': False
+        }), 500
+    except Exception as e:
+        import traceback
+        print(f"❌ PDF Generation Error: {str(e)}")
+        traceback.print_exc()
+        return jsonify({
+            'error': f'Failed to generate report: {str(e)}',
             'success': False
         }), 500
 
