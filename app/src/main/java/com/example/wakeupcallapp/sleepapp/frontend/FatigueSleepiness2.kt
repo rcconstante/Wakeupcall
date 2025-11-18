@@ -238,6 +238,8 @@ fun FatigueSleepiness2ScreenContent(
                                     surveyViewModel.updateESSResponse(0, ESSMapper.mapESSDozing(dozingReading))
                                     // Save Berlin item 9 (dozed while driving)
                                     surveyViewModel.updateBerlinCategory2("item9", mapFrequencyToBerlin(noddedOffDriving))
+                                    // Save nodded off driving separately for database
+                                    surveyViewModel.updateNoddedOffDriving(noddedOffDriving)
                                     onNext()
                                 }
                             },

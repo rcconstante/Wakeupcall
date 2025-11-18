@@ -45,6 +45,332 @@ import androidx.compose.runtime.rememberCoroutineScope
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 
+/**
+ * Key factor card component
+ */
+@Composable
+fun KeyFactorCard(icon: String, title: String, description: String) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0x40FFFFFF))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(Color(0x40FFFFFF)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = icon,
+                    fontSize = 24.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White
+                )
+                if (description.isNotEmpty()) {
+                    Text(
+                        text = description,
+                        fontSize = 14.sp,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Steps chart component
+ */
+@Composable
+fun DashboardStepsChart(
+    stepsData: Map<String, Int>,
+    modifier: Modifier = Modifier
+) {
+    val maxSteps = 15000
+    val sortedData = stepsData.entries.sortedBy { it.key }.takeLast(7)
+    
+    Canvas(modifier = modifier) {
+        if (sortedData.isEmpty()) return@Canvas
+        
+        val barWidth = size.width / (sortedData.size * 2)
+        val spacing = barWidth
+        
+        sortedData.forEachIndexed { index, entry ->
+            val barHeight = (entry.value.toFloat() / maxSteps * size.height).coerceAtMost(size.height)
+            val x = index * (barWidth + spacing) + spacing / 2
+            val y = size.height - barHeight
+            
+            drawRoundRect(
+                color = Color(0xFF4CAF50),
+                topLeft = Offset(x, y),
+                size = Size(barWidth, barHeight),
+                cornerRadius = CornerRadius(8f, 8f)
+            )
+            
+            val text = if (entry.value >= 1000) "${entry.value / 1000}k" else "${entry.value}"
+            val valuePaint = android.graphics.Paint().apply {
+                color = android.graphics.Color.WHITE
+                textSize = 20f
+                textAlign = android.graphics.Paint.Align.CENTER
+            }
+            drawContext.canvas.nativeCanvas.drawText(text, x + barWidth / 2, y - 8f, valuePaint)
+            
+            val dayLabel = entry.key.substring(8, 10)
+            val labelPaint = android.graphics.Paint().apply {
+                color = android.graphics.Color.WHITE
+                textSize = 22f
+                textAlign = android.graphics.Paint.Align.CENTER
+                alpha = 150
+            }
+            drawContext.canvas.nativeCanvas.drawText(dayLabel, x + barWidth / 2, size.height + 25f, labelPaint)
+        }
+    }
+}
+
+/**
+ * Sleep chart component
+ */
+@Composable
+fun DashboardSleepChart(
+    sleepData: Map<String, Double>,
+    modifier: Modifier = Modifier
+) {
+    val maxSleep = 10.0
+    val sortedData = sleepData.entries.sortedBy { it.key }.takeLast(7)
+    
+    Canvas(modifier = modifier) {
+        if (sortedData.isEmpty()) return@Canvas
+        
+        val barWidth = size.width / (sortedData.size * 2)
+        val spacing = barWidth
+        
+        sortedData.forEachIndexed { index, entry ->
+            val barHeight = (entry.value / maxSleep * size.height).toFloat()
+            val x = index * (barWidth + spacing) + spacing / 2
+            val y = size.height - barHeight
+            
+            drawRoundRect(
+                color = Color(0xFF6B8DD6),
+                topLeft = Offset(x, y),
+                size = Size(barWidth, barHeight),
+                cornerRadius = CornerRadius(8f, 8f)
+            )
+            
+            val text = String.format("%.1fh", entry.value)
+            val valuePaint = android.graphics.Paint().apply {
+                color = android.graphics.Color.WHITE
+                textSize = 20f
+                textAlign = android.graphics.Paint.Align.CENTER
+            }
+            drawContext.canvas.nativeCanvas.drawText(text, x + barWidth / 2, y - 8f, valuePaint)
+            
+            val dayLabel = entry.key.substring(8, 10)
+            val labelPaint = android.graphics.Paint().apply {
+                color = android.graphics.Color.WHITE
+                textSize = 22f
+                textAlign = android.graphics.Paint.Align.CENTER
+                alpha = 150
+            }
+            drawContext.canvas.nativeCanvas.drawText(dayLabel, x + barWidth / 2, size.height + 25f, labelPaint)
+        }
+    }
+}
+
+/**
+ * Drawer menu item component
+ */
+@Composable
+fun DrawerMenuItem(
+    emoji: String,
+    label: String,
+    onClick: () -> Unit = {}
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = emoji,
+            fontSize = 20.sp,
+            modifier = Modifier.padding(end = 16.dp)
+        )
+        Text(
+            text = label,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Medium,
+            color = Color(0xFF2C3E50)
+        )
+    }
+}
+
+/**
+ * Navigation drawer for dashboard menu
+ */
+@Composable
+fun DashboardDrawer(
+    navController: NavController,
+    onSignOut: () -> Unit = {},
+    onClose: () -> Unit = {}
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.4f))
+    ) {
+        // Close area - clicking outside drawer closes it
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { MutableInteractionSource() }
+                ) { onClose() }
+        ) {
+            // Drawer Content
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(320.dp)
+                    .align(Alignment.CenterStart)
+                    .background(
+                        Color(0xFFFFFFFF),
+                        RoundedCornerShape(topEnd = 0.dp, bottomEnd = 0.dp)
+                    )
+                    .clickable(enabled = false) { } // Prevent click-through
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .padding(24.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        // Drawer Title
+                        Text(
+                            text = "Menu",
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF2C3E50),
+                            modifier = Modifier.padding(start = 16.dp, top = 48.dp, bottom = 32.dp)
+                        )
+
+                        // Menu Items
+                        DrawerMenuItem(
+                            emoji = "🏠",
+                            label = "Dashboard",
+                            onClick = {
+                                navController.navigate("dashboard") {
+                                    popUpTo("dashboard") { inclusive = true }
+                                }
+                                onClose()
+                            }
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        DrawerMenuItem(
+                            emoji = "👤",
+                            label = "Profile",
+                            onClick = {
+                                navController.navigate("profile")
+                                onClose()
+                            }
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        DrawerMenuItem(
+                            emoji = "💡",
+                            label = "Recommendations",
+                            onClick = {
+                                navController.navigate("recommendations")
+                                onClose()
+                            }
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        DrawerMenuItem(
+                            emoji = "📊",
+                            label = "Key Factors",
+                            onClick = {
+                                navController.navigate("key_factors")
+                                onClose()
+                            }
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        DrawerMenuItem(
+                            emoji = "📱",
+                            label = "Data Sources",
+                            onClick = {
+                                navController.navigate("data_sources")
+                                onClose()
+                            }
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        DrawerMenuItem(
+                            emoji = "⚙️",
+                            label = "Settings",
+                            onClick = {
+                                navController.navigate("settings")
+                                onClose()
+                            }
+                        )
+                    }
+
+                    // Sign Out Button at bottom
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onClose()
+                                onSignOut()
+                            }
+                            .padding(horizontal = 16.dp, vertical = 24.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "🚪",
+                            fontSize = 20.sp,
+                            modifier = Modifier.padding(end = 16.dp)
+                        )
+                        Text(
+                            text = "Sign Out",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFFE74C3C)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun DashboardScreen(
     navController: NavController,
@@ -519,6 +845,7 @@ fun DashboardScreen(
                                     fontSize = 14.sp,
                                     color = Color.White.copy(alpha = 0.6f)
                                 )
+                                
                                 if (!isFitConnected) {
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Text(
@@ -526,13 +853,39 @@ fun DashboardScreen(
                                         fontSize = 12.sp,
                                         color = Color.White.copy(alpha = 0.5f)
                                     )
-                                } else if (fitData != null) {
+                                }
+                                
+                                if (isFitConnected && fitData != null) {
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Text(
-                                        text = "Google Fit has no data available",
+                                        text = "No activity data found",
                                         fontSize = 12.sp,
                                         color = Color.White.copy(alpha = 0.5f)
                                     )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "Open Google Fit app to start tracking",
+                                        fontSize = 11.sp,
+                                        color = Color.White.copy(alpha = 0.4f)
+                                    )
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Button(
+                                        onClick = { 
+                                            // Trigger a refresh of Google Fit data
+                                            googleFitViewModel.fetchFitnessData()
+                                        },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = Color(0xFF4CAF50)
+                                        ),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.height(36.dp)
+                                    ) {
+                                        Text(
+                                            text = "🔄 Refresh Data",
+                                            fontSize = 12.sp,
+                                            color = Color.White
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -563,8 +916,8 @@ fun DashboardScreen(
             }
 
             Spacer(modifier = Modifier.height(80.dp))
-            }
         }
+        } // Close SwipeRefresh lambda
 
         // Drawer Overlay - rendered on top
         if (isDrawerOpen) {
@@ -580,323 +933,9 @@ fun DashboardScreen(
     }
 }
 
-@Composable
-fun KeyFactorCard(icon: String, title: String, description: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0x40FFFFFF))
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(Color(0x40FFFFFF)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = icon,
-                    fontSize = 24.sp
-                )
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White
-                )
-                if (description.isNotEmpty()) {
-                    Text(
-                        text = description,
-                        fontSize = 14.sp,
-                        color = Color.White.copy(alpha = 0.8f)
-                    )
-                }
-            }
-        }
-    }
-}
-
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
 fun PreviewDashboard() {
     val navController = rememberNavController()
     DashboardScreen(navController)
-}
-
-/**
- * Navigation drawer for dashboard menu
- */
-@Composable
-fun DashboardDrawer(
-    navController: NavController,
-    onSignOut: () -> Unit = {},
-    onClose: () -> Unit = {}
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.4f))
-    ) {
-        // Close area - clicking outside drawer closes it
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clickable(
-                    indication = null,
-                    interactionSource = remember { MutableInteractionSource() }
-                ) { onClose() }
-        ) {
-            // Drawer Content
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(320.dp)
-                    .align(Alignment.CenterStart)
-                    .background(
-                        Color(0xFFFFFFFF),
-                        RoundedCornerShape(topEnd = 0.dp, bottomEnd = 0.dp)
-                    )
-                    .clickable(enabled = false) { } // Prevent click-through
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .padding(24.dp),
-                    verticalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column {
-                        // Drawer Title
-                        Text(
-                            text = "Menu",
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF2C3E50),
-                            modifier = Modifier.padding(start = 16.dp, top = 48.dp, bottom = 32.dp)
-                        )
-
-                        // Menu Items
-                        DrawerMenuItem(
-                            emoji = "🏠",
-                            label = "Dashboard",
-                            onClick = {
-                                navController.navigate("dashboard") {
-                                    popUpTo("dashboard") { inclusive = true }
-                                }
-                                onClose()
-                            }
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        DrawerMenuItem(
-                            emoji = "👤",
-                            label = "Profile",
-                            onClick = {
-                                navController.navigate("profile")
-                                onClose()
-                            }
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        DrawerMenuItem(
-                            emoji = "💡",
-                            label = "Recommendations",
-                            onClick = {
-                                navController.navigate("recommendations")
-                                onClose()
-                            }
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        DrawerMenuItem(
-                            emoji = "📊",
-                            label = "Key Factors",
-                            onClick = {
-                                navController.navigate("key_factors")
-                                onClose()
-                            }
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        DrawerMenuItem(
-                            emoji = "📱",
-                            label = "Data Sources",
-                            onClick = {
-                                navController.navigate("data_sources")
-                                onClose()
-                            }
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        DrawerMenuItem(
-                            emoji = "⚙️",
-                            label = "Settings",
-                            onClick = {
-                                navController.navigate("settings")
-                                onClose()
-                            }
-                        )
-                    }
-
-                    // Sign Out Button at bottom
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                onClose()
-                                onSignOut()
-                            }
-                            .padding(horizontal = 16.dp, vertical = 24.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "🚪",
-                            fontSize = 20.sp,
-                            modifier = Modifier.padding(end = 16.dp)
-                        )
-                        Text(
-                            text = "Sign Out",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Color(0xFFE74C3C)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun DrawerMenuItem(
-    emoji: String,
-    label: String,
-    onClick: () -> Unit = {}
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = emoji,
-            fontSize = 20.sp,
-            modifier = Modifier.padding(end = 16.dp)
-        )
-        Text(
-            text = label,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Medium,
-            color = Color(0xFF2C3E50)
-        )
-    }
-}
-
-@Composable
-fun DashboardStepsChart(
-    stepsData: Map<String, Int>,
-    modifier: Modifier = Modifier
-) {
-    val maxSteps = 15000
-    val sortedData = stepsData.entries.sortedBy { it.key }.takeLast(7)
-    
-    Canvas(modifier = modifier) {
-        if (sortedData.isEmpty()) return@Canvas
-        
-        val barWidth = size.width / (sortedData.size * 2)
-        val spacing = barWidth
-        
-        sortedData.forEachIndexed { index, entry ->
-            val barHeight = (entry.value.toFloat() / maxSteps * size.height).coerceAtMost(size.height)
-            val x = index * (barWidth + spacing) + spacing / 2
-            val y = size.height - barHeight
-            
-            drawRoundRect(
-                color = Color(0xFF4CAF50),
-                topLeft = Offset(x, y),
-                size = Size(barWidth, barHeight),
-                cornerRadius = CornerRadius(8f, 8f)
-            )
-            
-            val text = if (entry.value >= 1000) "${entry.value / 1000}k" else "${entry.value}"
-            val valuePaint = android.graphics.Paint().apply {
-                color = android.graphics.Color.WHITE
-                textSize = 20f
-                textAlign = android.graphics.Paint.Align.CENTER
-            }
-            drawContext.canvas.nativeCanvas.drawText(text, x + barWidth / 2, y - 8f, valuePaint)
-            
-            val dayLabel = entry.key.substring(8, 10)
-            val labelPaint = android.graphics.Paint().apply {
-                color = android.graphics.Color.WHITE
-                textSize = 22f
-                textAlign = android.graphics.Paint.Align.CENTER
-                alpha = 150
-            }
-            drawContext.canvas.nativeCanvas.drawText(dayLabel, x + barWidth / 2, size.height + 25f, labelPaint)
-        }
-    }
-}
-
-@Composable
-fun DashboardSleepChart(
-    sleepData: Map<String, Double>,
-    modifier: Modifier = Modifier
-) {
-    val maxSleep = 10.0
-    val sortedData = sleepData.entries.sortedBy { it.key }.takeLast(7)
-    
-    Canvas(modifier = modifier) {
-        if (sortedData.isEmpty()) return@Canvas
-        
-        val barWidth = size.width / (sortedData.size * 2)
-        val spacing = barWidth
-        
-        sortedData.forEachIndexed { index, entry ->
-            val barHeight = (entry.value / maxSleep * size.height).toFloat()
-            val x = index * (barWidth + spacing) + spacing / 2
-            val y = size.height - barHeight
-            
-            drawRoundRect(
-                color = Color(0xFF6B8DD6),
-                topLeft = Offset(x, y),
-                size = Size(barWidth, barHeight),
-                cornerRadius = CornerRadius(8f, 8f)
-            )
-            
-            val text = String.format("%.1fh", entry.value)
-            val valuePaint = android.graphics.Paint().apply {
-                color = android.graphics.Color.WHITE
-                textSize = 20f
-                textAlign = android.graphics.Paint.Align.CENTER
-            }
-            drawContext.canvas.nativeCanvas.drawText(text, x + barWidth / 2, y - 8f, valuePaint)
-            
-            val dayLabel = entry.key.substring(8, 10)
-            val labelPaint = android.graphics.Paint().apply {
-                color = android.graphics.Color.WHITE
-                textSize = 22f
-                textAlign = android.graphics.Paint.Align.CENTER
-                alpha = 150
-            }
-            drawContext.canvas.nativeCanvas.drawText(dayLabel, x + barWidth / 2, size.height + 25f, labelPaint)
-        }
-    }
 }

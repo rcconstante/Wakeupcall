@@ -100,7 +100,7 @@ fun RecommendationsScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = "Recommendations",
+                        text = "Insights & Recommendations",
                         fontSize = 26.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
@@ -109,7 +109,7 @@ fun RecommendationsScreen(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
-                        text = "Tips based on your profile.",
+                        text = "Personalized insights based on your health profile.",
                         fontSize = 14.sp,
                         color = Color.White.copy(alpha = 0.9f)
                     )
@@ -120,29 +120,52 @@ fun RecommendationsScreen(
                     if (recommendation != null && recommendation.isNotEmpty()) {
                         val recommendations = recommendation.split(" | ")
                         recommendations.forEachIndexed { index, rec ->
+                            // Parse recommendation format: "Title: Description [Source]"
+                            val titleEnd = rec.indexOf(":")
+                            val sourceStart = rec.lastIndexOf("[")
+                            val sourceEnd = rec.lastIndexOf("]")
+                            
+                            val title = if (titleEnd > 0) rec.substring(0, titleEnd).trim() else rec.take(50)
+                            val description = if (titleEnd > 0 && sourceStart > titleEnd) {
+                                rec.substring(titleEnd + 1, sourceStart).trim()
+                            } else if (titleEnd > 0) {
+                                rec.substring(titleEnd + 1).trim()
+                            } else {
+                                ""
+                            }
+                            val source = if (sourceStart > 0 && sourceEnd > sourceStart) {
+                                rec.substring(sourceStart + 1, sourceEnd).trim()
+                            } else {
+                                ""
+                            }
+                            
+                            // Determine icon based on title/content
                             val icon = when {
-                                rec.contains("HIGH RISK", ignoreCase = true) -> "🚨"
-                                rec.contains("MODERATE RISK", ignoreCase = true) -> "⚠️"
-                                rec.contains("LOW RISK", ignoreCase = true) -> "✅"
-                                rec.contains("weight", ignoreCase = true) || rec.contains("BMI", ignoreCase = true) -> "🎯"
-                                rec.contains("alcohol", ignoreCase = true) -> "🍷"
-                                rec.contains("smok", ignoreCase = true) -> "🚭"
-                                rec.contains("sleep", ignoreCase = true) || rec.contains("bed", ignoreCase = true) -> "😴"
-                                rec.contains("pressure", ignoreCase = true) || rec.contains("hypertension", ignoreCase = true) -> "🩺"
-                                rec.contains("diabetes", ignoreCase = true) -> "💊"
-                                rec.contains("age", ignoreCase = true) -> "👴"
-                                rec.contains("neck", ignoreCase = true) -> "📐"
-                                rec.contains("snor", ignoreCase = true) -> "💤"
-                                rec.contains("specialist", ignoreCase = true) || rec.contains("physician", ignoreCase = true) -> "👨‍⚕️"
+                                title.contains("HIGH RISK", ignoreCase = true) || title.contains("High Risk", ignoreCase = true) -> "🚨"
+                                title.contains("MODERATE RISK", ignoreCase = true) || title.contains("Moderate Risk", ignoreCase = true) -> "⚠️"
+                                title.contains("LOW RISK", ignoreCase = true) || title.contains("Low Risk", ignoreCase = true) -> "✅"
+                                title.contains("Weight", ignoreCase = true) || title.contains("BMI", ignoreCase = true) -> "🎯"
+                                title.contains("Alcohol", ignoreCase = true) -> "🍷"
+                                title.contains("Smok", ignoreCase = true) -> "🚭"
+                                title.contains("Sleep", ignoreCase = true) || title.contains("Bed", ignoreCase = true) -> "😴"
+                                title.contains("Pressure", ignoreCase = true) || title.contains("Hypertension", ignoreCase = true) -> "🩺"
+                                title.contains("Diabetes", ignoreCase = true) -> "💊"
+                                title.contains("Age", ignoreCase = true) -> "👴"
+                                title.contains("Neck", ignoreCase = true) -> "📐"
+                                title.contains("Snor", ignoreCase = true) -> "💤"
+                                title.contains("Activity", ignoreCase = true) || title.contains("Exercise", ignoreCase = true) -> "🏃"
+                                title.contains("Cardiovascular", ignoreCase = true) || title.contains("Heart", ignoreCase = true) -> "❤️"
+                                title.contains("STOP-BANG", ignoreCase = true) || title.contains("STOPBANG", ignoreCase = true) -> "📊"
+                                title.contains("Sleepiness", ignoreCase = true) || title.contains("Daytime", ignoreCase = true) -> "😪"
+                                title.contains("Breathing", ignoreCase = true) || title.contains("Airway", ignoreCase = true) -> "🫁"
                                 else -> "💡"
                             }
-                            val title = rec.split(":").firstOrNull()?.trim() ?: rec.take(50)
-                            val description = if (rec.contains(":")) rec.substringAfter(":").trim() else ""
                             
                             RecommendationItem(
                                 icon = icon,
                                 title = title,
-                                description = description
+                                description = description,
+                                source = source
                             )
                             if (index < recommendations.size - 1) {
                                 Spacer(modifier = Modifier.height(12.dp))
@@ -270,7 +293,8 @@ fun RecommendationsScreen(
 fun RecommendationItem(
     icon: String,
     title: String,
-    description: String
+    description: String,
+    source: String = ""
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -313,6 +337,16 @@ fun RecommendationItem(
                     color = Color.White.copy(alpha = 0.8f),
                     lineHeight = 18.sp
                 )
+                if (source.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Source: $source",
+                        fontSize = 11.sp,
+                        color = Color.White.copy(alpha = 0.6f),
+                        lineHeight = 14.sp,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                    )
+                }
             }
         }
     }

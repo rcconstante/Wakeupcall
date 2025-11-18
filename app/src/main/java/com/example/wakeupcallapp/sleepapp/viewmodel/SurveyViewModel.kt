@@ -86,6 +86,20 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
     private val _feelsSleepy = MutableStateFlow(false)
     val feelsSleepy: StateFlow<Boolean> = _feelsSleepy.asStateFlow()
     
+    private val _noddedOffDriving = MutableStateFlow("")
+    val noddedOffDriving: StateFlow<String> = _noddedOffDriving.asStateFlow()
+    
+    // ============ SNORING DETAILS ============
+    private val _snoringFrequency = MutableStateFlow("")
+    val snoringFrequency: StateFlow<String> = _snoringFrequency.asStateFlow()
+    
+    private val _snoringBothersOthers = MutableStateFlow(false)
+    val snoringBothersOthers: StateFlow<Boolean> = _snoringBothersOthers.asStateFlow()
+    
+    // ============ PHYSICAL ACTIVITY ============
+    private val _physicalActivityTime = MutableStateFlow("")
+    val physicalActivityTime: StateFlow<String> = _physicalActivityTime.asStateFlow()
+    
     // ============ GOOGLE FIT DATA ============
     private val _dailySteps = MutableStateFlow(5000)
     val dailySteps: StateFlow<Int> = _dailySteps.asStateFlow()
@@ -180,6 +194,22 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
         _feelsSleepy.value = feelsSleepy
     }
     
+    fun updateNoddedOffDriving(value: String) {
+        _noddedOffDriving.value = value
+    }
+    
+    fun updateSnoringFrequency(value: String) {
+        _snoringFrequency.value = value
+    }
+    
+    fun updateSnoringBothersOthers(value: Boolean) {
+        _snoringBothersOthers.value = value
+    }
+    
+    fun updatePhysicalActivityTime(value: String) {
+        _physicalActivityTime.value = value
+    }
+    
     fun updateDailySteps(steps: Int) {
         _dailySteps.value = steps
     }
@@ -218,6 +248,14 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
         _tiredDuringDay.value = "No"
         _tiredAfterSleep.value = "No"
         _feelsSleepy.value = false
+        _noddedOffDriving.value = ""
+        
+        // Reset snoring details
+        _snoringFrequency.value = ""
+        _snoringBothersOthers.value = false
+        
+        // Reset physical activity
+        _physicalActivityTime.value = ""
         
         // Reset Google Fit data
         _dailySteps.value = 5000
@@ -275,11 +313,19 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
                     hypertension = _hypertension.value
                 )
                 
-                // Build survey responses
+                // Build survey responses with all additional fields
                 val surveyResponses = SurveyResponses(
                     essResponses = _essResponses.value,
                     berlinResponses = berlinResponses,
-                    stopbangResponses = stopbangResponses
+                    stopbangResponses = stopbangResponses,
+                    snoringLevel = _snoringLevel.value.takeIf { it.isNotEmpty() },
+                    snoringFrequency = _snoringFrequency.value.takeIf { it.isNotEmpty() },
+                    snoringBothersOthers = _snoringBothersOthers.value,
+                    tiredDuringDay = _tiredDuringDay.value.takeIf { it.isNotEmpty() },
+                    tiredAfterSleep = _tiredAfterSleep.value.takeIf { it.isNotEmpty() },
+                    feelsSleepyDaytime = _feelsSleepy.value,
+                    noddedOffDriving = _noddedOffDriving.value.isNotEmpty() && _noddedOffDriving.value != "Never or nearly never",
+                    physicalActivityTime = _physicalActivityTime.value.takeIf { it.isNotEmpty() }
                 )
                 
                 // Build Google Fit data - include data from GoogleFitViewModel if available

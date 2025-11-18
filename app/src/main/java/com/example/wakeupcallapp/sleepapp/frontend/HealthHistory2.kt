@@ -238,6 +238,8 @@ fun HealthHistory2ScreenContent(
                                     // Save to ViewModel
                                     val steps = stepCount.toIntOrNull() ?: 0
                                     surveyViewModel.updateDailySteps(steps)
+                                    // Save physical activity time
+                                    surveyViewModel.updatePhysicalActivityTime(selectedTime)
                                     onNext()
                                 }
                             },

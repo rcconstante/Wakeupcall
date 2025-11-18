@@ -261,6 +261,66 @@ class WakeUpCallPDFGenerator:
         story.append(lifestyle_table)
         story.append(Spacer(1, 0.2*inch))
         
+        # RECOMMENDATIONS SECTION
+        story.append(Paragraph("Insights & Recommendations", self.styles['SectionHeader']))
+        
+        recommendations_text = data.get('assessment', {}).get('recommendation', '')
+        if recommendations_text:
+            # Split recommendations by " | " delimiter
+            recommendations = recommendations_text.split(" | ")
+            
+            for i, rec in enumerate(recommendations[:10], 1):  # Limit to top 10
+                # Parse format: "Title: Description [Source]"
+                title_end = rec.find(":")
+                source_start = rec.rfind("[")
+                source_end = rec.rfind("]")
+                
+                if title_end > 0:
+                    title = rec[:title_end].strip()
+                    if source_start > title_end and source_end > source_start:
+                        description = rec[title_end + 1:source_start].strip()
+                        source = rec[source_start + 1:source_end].strip()
+                    else:
+                        description = rec[title_end + 1:].strip()
+                        source = ""
+                else:
+                    title = rec[:50] if len(rec) > 50 else rec
+                    description = ""
+                    source = ""
+                
+                # Add recommendation with proper formatting
+                story.append(Paragraph(
+                    f"<b>{i}. {title}</b>",
+                    self.styles['Normal']
+                ))
+                
+                if description:
+                    story.append(Paragraph(
+                        description,
+                        self.styles['Normal']
+                    ))
+                
+                if source:
+                    story.append(Paragraph(
+                        f"<i>Source: {source}</i>",
+                        ParagraphStyle(
+                            name='SourceStyle',
+                            parent=self.styles['Normal'],
+                            fontSize=8,
+                            textColor=colors.HexColor('#666666'),
+                            leftIndent=12
+                        )
+                    ))
+                
+                story.append(Spacer(1, 0.1*inch))
+        else:
+            story.append(Paragraph(
+                "No specific recommendations available at this time.",
+                self.styles['Normal']
+            ))
+        
+        story.append(Spacer(1, 0.2*inch))
+        
         # SHAP MODEL EXPLANATION SECTION
         if 'shap_chart' in data and data['shap_chart']:
             story.append(Paragraph("SHAP Model Explanation", self.styles['SectionHeader']))

@@ -220,6 +220,9 @@ fun SleepHabits2ScreenContent(
                                         snoringLevel = surveyViewModel.snoringLevel.value,
                                         observedApnea = hasFrequentApnea
                                     )
+                                    // Update new fields
+                                    surveyViewModel.updateSnoringFrequency(snoreFrequency)
+                                    surveyViewModel.updateSnoringBothersOthers(botheredOthers == "Yes")
                                     onNext()
                                 }
                             },

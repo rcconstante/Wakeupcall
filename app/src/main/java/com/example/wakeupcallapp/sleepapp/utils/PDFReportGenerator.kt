@@ -489,7 +489,7 @@ class PDFReportGenerator {
         }
         
         private fun addRecommendations(document: Document, surveyResult: SurveySubmissionResponse) {
-            val section = Paragraph("RECOMMENDATIONS")
+            val section = Paragraph("INSIGHTS & RECOMMENDATIONS")
                 .setFontSize(14f)
                 .setBold()
                 .setFontColor(SECONDARY_COLOR)
@@ -501,13 +501,53 @@ class PDFReportGenerator {
             if (prediction != null && prediction.recommendation.isNotEmpty()) {
                 val recommendations = prediction.recommendation.split(" | ")
                 
-                recommendations.forEachIndexed { index, rec ->
-                    val bullet = Paragraph("${index + 1}. ")
-                        .add(Text(rec))
+                recommendations.take(10).forEachIndexed { index, rec ->
+                    // Parse format: "Title: Description [Source]"
+                    val titleEnd = rec.indexOf(":")
+                    val sourceStart = rec.lastIndexOf("[")
+                    val sourceEnd = rec.lastIndexOf("]")
+                    
+                    val title = if (titleEnd > 0) rec.substring(0, titleEnd).trim() else rec.take(50)
+                    val description = if (titleEnd > 0 && sourceStart > titleEnd) {
+                        rec.substring(titleEnd + 1, sourceStart).trim()
+                    } else if (titleEnd > 0) {
+                        rec.substring(titleEnd + 1).trim()
+                    } else {
+                        ""
+                    }
+                    val source = if (sourceStart > 0 && sourceEnd > sourceStart) {
+                        rec.substring(sourceStart + 1, sourceEnd).trim()
+                    } else {
+                        ""
+                    }
+                    
+                    // Add title
+                    val titlePara = Paragraph("${index + 1}. $title")
                         .setFontSize(10f)
-                        .setMarginBottom(8f)
+                        .setBold()
+                        .setMarginBottom(3f)
                         .setMarginLeft(10f)
-                    document.add(bullet)
+                    document.add(titlePara)
+                    
+                    // Add description
+                    if (description.isNotEmpty()) {
+                        val descPara = Paragraph(description)
+                            .setFontSize(9f)
+                            .setMarginBottom(2f)
+                            .setMarginLeft(15f)
+                        document.add(descPara)
+                    }
+                    
+                    // Add source
+                    if (source.isNotEmpty()) {
+                        val sourcePara = Paragraph("Source: $source")
+                            .setFontSize(8f)
+                            .setFontColor(GRAY_COLOR)
+                            .setItalic()
+                            .setMarginBottom(8f)
+                            .setMarginLeft(15f)
+                        document.add(sourcePara)
+                    }
                 }
             }
             

@@ -131,12 +131,49 @@ fun FatigueSleepiness5ScreenContent(
 
                     // Error message from submission
                     errorMessage?.let { error ->
-                        Text(
-                            text = error,
-                            fontSize = 14.sp,
-                            color = Color(0xFFFF6B6B),
-                            fontWeight = FontWeight.Medium
-                        )
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFF6B6B).copy(alpha = 0.2f)),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(
+                                    text = "⚠️ Backend Connection Failed",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = error,
+                                    fontSize = 14.sp,
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = "✅ Steps to fix:",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "1. Start backend: cd backend && python app.py",
+                                    fontSize = 12.sp,
+                                    color = Color.White.copy(alpha = 0.9f)
+                                )
+                                Text(
+                                    text = "2. Verify server: http://192.168.18.3:5000/",
+                                    fontSize = 12.sp,
+                                    color = Color.White.copy(alpha = 0.9f)
+                                )
+                                Text(
+                                    text = "3. Check your PC's firewall settings",
+                                    fontSize = 12.sp,
+                                    color = Color.White.copy(alpha = 0.9f)
+                                )
+                            }
+                        }
                         Spacer(modifier = Modifier.height(12.dp))
                     }
 

@@ -297,8 +297,89 @@ fun ProfileScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Google Fit Data Status Message
+            if (isGoogleFitConnected && (fitData == null || (fitData!!.averageDailySteps == 0 && fitData!!.sleepDurationHours == 0.0))) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0x60FFFFFF))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "📊 Google Fit Data",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        Text(
+                            text = "No activity data found",
+                            fontSize = 16.sp,
+                            color = Color.White.copy(alpha = 0.8f)
+                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Text(
+                            text = "To see your sleep and step data:",
+                            fontSize = 14.sp,
+                            color = Color.White.copy(alpha = 0.7f)
+                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Text(
+                            text = "1. Open the Google Fit app",
+                            fontSize = 13.sp,
+                            color = Color.White.copy(alpha = 0.6f)
+                        )
+                        Text(
+                            text = "2. Ensure it's tracking your steps and sleep",
+                            fontSize = 13.sp,
+                            color = Color.White.copy(alpha = 0.6f)
+                        )
+                        Text(
+                            text = "3. Wait a few hours for data to sync",
+                            fontSize = 13.sp,
+                            color = Color.White.copy(alpha = 0.6f)
+                        )
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        Button(
+                            onClick = { 
+                                googleFitViewModel.fetchFitnessData()
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF4CAF50)
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                        ) {
+                            Text(
+                                text = "🔄 Refresh Data",
+                                fontSize = 16.sp,
+                                color = Color.White,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
             // Weekly Sleep Chart from Google Fit
-            if (isGoogleFitConnected && fitData != null) {
+            if (isGoogleFitConnected && fitData != null && (fitData!!.averageDailySteps > 0 || fitData!!.sleepDurationHours > 0.0)) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(24.dp),
@@ -353,7 +434,7 @@ fun ProfileScreen(
             }
 
             // Weekly Steps Chart from Google Fit
-            if (isGoogleFitConnected && fitData != null) {
+            if (isGoogleFitConnected && fitData != null && (fitData!!.averageDailySteps > 0 || fitData!!.sleepDurationHours > 0.0)) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(24.dp),

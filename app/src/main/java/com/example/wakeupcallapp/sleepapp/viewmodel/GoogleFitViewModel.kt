@@ -91,7 +91,19 @@ class GoogleFitViewModel(application: Application) : AndroidViewModel(applicatio
                 Log.d(TAG, "✅ Saved connection state for user: $userId")
             }
             _isConnected.value = true
-            fetchFitnessData()
+            
+            // Subscribe to data sources and then fetch data
+            viewModelScope.launch {
+                try {
+                    Log.d(TAG, "📡 Setting up Google Fit subscriptions...")
+                    googleFitManager.subscribeToDataSources()
+                    googleFitManager.checkSubscriptions()
+                } catch (e: Exception) {
+                    Log.e(TAG, "⚠️ Subscription setup failed: ${e.message}", e)
+                }
+                // Fetch data regardless of subscription result
+                fetchFitnessData()
+            }
         } else {
             _isConnected.value = false
             _errorMessage.value = "Google Fit permissions denied"

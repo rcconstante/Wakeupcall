@@ -9,6 +9,7 @@ import sqlite3
 import secrets
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
+from recommendation_engine import RecommendationEngine
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = secrets.token_hex(32)
@@ -200,60 +201,30 @@ if scaler is None:
 else:
     print("✅ Scaler loaded successfully!")
 
-def generate_ml_recommendation(osa_probability, risk_level, age, bmi, neck_cm, hypertension, diabetes, smokes, alcohol, ess_score, berlin_score, stopbang_score):
-    """Generate personalized recommendations based on ML prediction and risk factors"""
+def generate_ml_recommendation(osa_probability, risk_level, age, bmi, neck_cm, hypertension, diabetes, smokes, alcohol, ess_score, berlin_score, stopbang_score, sleep_duration=7.0, daily_steps=5000):
+    """Generate personalized recommendations using comprehensive recommendation engine"""
     
-    recommendations = []
+    # Use the new RecommendationEngine
+    sex = 1  # Default to male (conservative for OSA risk)
+    recommendations = RecommendationEngine.generate_recommendations(
+        age=age,
+        sex=sex,
+        bmi=bmi,
+        neck_cm=neck_cm,
+        hypertension=hypertension,
+        diabetes=diabetes,
+        smokes=smokes,
+        alcohol=alcohol,
+        ess_score=ess_score,
+        berlin_score=berlin_score,
+        stopbang_score=stopbang_score,
+        sleep_duration=sleep_duration,
+        daily_steps=daily_steps,
+        risk_level=risk_level
+    )
     
-    # Base recommendation based on OSA probability
-    if osa_probability >= 0.7:
-        recommendations.append("🚨 HIGH RISK: Immediate sleep specialist consultation recommended")
-        recommendations.append("Consider overnight sleep study (polysomnography)")
-    elif osa_probability >= 0.4:
-        recommendations.append("⚠️ MODERATE RISK: Schedule sleep specialist appointment within 2-4 weeks")
-    else:
-        recommendations.append("✅ LOW RISK: Continue healthy sleep habits")
-    
-    # Specific recommendations based on individual risk factors
-    if bmi >= 30:
-        recommendations.append(f"🎯 Weight management: BMI {bmi:.1f} - aim for 5-10% weight loss")
-    elif bmi >= 25:
-        recommendations.append(f"💪 Healthy weight: BMI {bmi:.1f} - maintain current weight with exercise")
-    
-    if neck_cm >= 40:  # High neck circumference
-        recommendations.append("📐 Large neck circumference increases OSA risk - focus on overall weight reduction")
-    
-    if ess_score >= 16:
-        recommendations.append("😴 Excessive daytime sleepiness detected - avoid driving when sleepy")
-    elif ess_score >= 11:
-        recommendations.append("😪 Moderate sleepiness - improve sleep hygiene and consider naps")
-    
-    if berlin_score >= 2:
-        recommendations.append("💤 High snoring risk - sleep on your side, avoid alcohol before bed")
-    
-    if stopbang_score >= 5:
-        recommendations.append("📊 High STOP-BANG score - multiple OSA risk factors present")
-    
-    # Lifestyle recommendations
-    if alcohol:
-        recommendations.append("🍷 Limit alcohol, especially 3+ hours before bedtime")
-    
-    if smokes:
-        recommendations.append("🚭 Smoking cessation strongly recommended - affects airway inflammation")
-    
-    if hypertension:
-        recommendations.append("🩺 Monitor blood pressure - OSA can worsen hypertension")
-    
-    if diabetes:
-        recommendations.append("💊 Diabetes management important - OSA affects blood sugar control")
-    
-    if age >= 50:
-        recommendations.append("👴 Age-related OSA risk - regular sleep health checkups recommended")
-    
-    # Sleep hygiene for everyone
-    recommendations.append("😴 General: Maintain regular sleep schedule, dark quiet room, avoid screens before bed")
-    
-    return " | ".join(recommendations)  # Return all relevant recommendations
+    # Format for API response (pipe-separated)
+    return RecommendationEngine.format_for_api(recommendations)
 
 def calculate_top_risk_factors(input_features, osa_probability):
     """Calculate top risk factors based on actual survey data and thresholds"""
@@ -695,7 +666,8 @@ def get_latest_survey():
         cursor.execute('''
             SELECT id, age, sex, height_cm, weight_kg, neck_circumference_cm, bmi,
                    hypertension, diabetes, smokes, alcohol,
-                   ess_score, berlin_score, stopbang_score, osa_probability, risk_level, completed_at
+                   ess_score, berlin_score, stopbang_score, osa_probability, risk_level, completed_at,
+                   sleep_duration_hours, daily_steps
             FROM user_surveys
             WHERE user_id = ?
             ORDER BY completed_at DESC
@@ -715,6 +687,10 @@ def get_latest_survey():
         # Extract survey data
         survey_id = survey[0]
         age = survey[1]
+        sex_str = survey[2]
+        height_cm = survey[3]
+        weight_kg = survey[4]
+        neck_cm = survey[5]
         bmi = survey[6]
         hypertension = bool(survey[7])
         diabetes = bool(survey[8])
@@ -725,6 +701,9 @@ def get_latest_survey():
         stopbang_score = survey[13]
         osa_probability = survey[14]
         risk_level = survey[15]
+        # completed_at = survey[16]
+        sleep_duration = survey[17] if len(survey) > 17 and survey[17] else 7.0
+        daily_steps = survey[18] if len(survey) > 18 and survey[18] else 5000
         
         # Determine score categories
         if ess_score < 8:
@@ -745,13 +724,13 @@ def get_latest_survey():
         else:
             stopbang_category = "High Risk"
         
-        # Generate recommendation based on risk level
-        if osa_probability >= 0.7:
-            recommendation = "HIGH RISK: Immediate sleep specialist consultation recommended"
-        elif osa_probability >= 0.4:
-            recommendation = "MODERATE RISK: Schedule sleep specialist appointment within 2-4 weeks"
-        else:
-            recommendation = "LOW RISK: Continue healthy sleep habits"
+        # Generate comprehensive recommendations using the recommendation engine
+        recommendation = generate_ml_recommendation(
+            osa_probability, risk_level, age, bmi, neck_cm,
+            hypertension, diabetes, smokes, alcohol,
+            ess_score, berlin_score, stopbang_score,
+            sleep_duration, daily_steps
+        )
         
         # Calculate top risk factors
         top_factors = []
@@ -791,11 +770,7 @@ def get_latest_survey():
                 'priority': '5'
             })
         
-        # Extract demographics for response
-        sex = survey[2]
-        height_cm = survey[3]
-        weight_kg = survey[4]
-        neck_cm = survey[5]
+        # Use already extracted demographics
         
         # Return in the same format as submit endpoint
         return jsonify({
@@ -807,7 +782,7 @@ def get_latest_survey():
                 'survey_id': survey_id,
                 'demographics': {
                     'age': age,
-                    'sex': sex,
+                    'sex': sex_str,
                     'height_cm': height_cm,
                     'weight_kg': weight_kg,
                     'neck_circumference_cm': neck_cm
@@ -918,6 +893,16 @@ def submit_survey():
         ess_responses = surveys.get('ess_responses', [1, 1, 1, 1, 1, 1, 1, 1])
         ess_score, ess_category = calculate_ess_score(ess_responses)
         
+        # Extract individual ESS scores for detailed storage
+        ess_sitting_reading = ess_responses[0] if len(ess_responses) > 0 else 0
+        ess_watching_tv = ess_responses[1] if len(ess_responses) > 1 else 0
+        ess_public_sitting = ess_responses[2] if len(ess_responses) > 2 else 0
+        ess_passenger_car = ess_responses[3] if len(ess_responses) > 3 else 0
+        ess_lying_down_afternoon = ess_responses[4] if len(ess_responses) > 4 else 0
+        ess_talking = ess_responses[5] if len(ess_responses) > 5 else 0
+        ess_after_lunch = ess_responses[6] if len(ess_responses) > 6 else 0
+        ess_traffic_stop = ess_responses[7] if len(ess_responses) > 7 else 0
+        
         # Berlin calculation
         berlin_data = surveys.get('berlin_responses', {})
         berlin_cat1 = berlin_data.get('category1', {})
@@ -937,6 +922,16 @@ def submit_survey():
             snoring, tired, observed, pressure,
             age, neck_cm, bmi, sex == 1
         )
+        
+        # Extract additional survey fields that aren't in the standard scoring
+        snoring_level = surveys.get('snoring_level', 'Unknown')  # "Mild", "Moderate", "Loud", "Very Loud"
+        snoring_frequency = surveys.get('snoring_frequency', 'Unknown')  # Frequency of snoring
+        snoring_bothers_others = 1 if surveys.get('snoring_bothers_others', False) else 0
+        tired_during_day = surveys.get('tired_during_day', 'Unknown')  # Fatigue level
+        tired_after_sleep = surveys.get('tired_after_sleep', 'Unknown')  # Post-sleep tiredness
+        feels_sleepy_daytime = 1 if surveys.get('feels_sleepy_daytime', tired) else 0
+        nodded_off_driving = 1 if surveys.get('nodded_off_driving', False) else 0
+        physical_activity_time = surveys.get('physical_activity_time', 'Unknown')  # When they exercise
         
         # Extract Google Fit data
         fit_data = data.get('google_fit', {})
@@ -1052,7 +1047,8 @@ def submit_survey():
                 recommendation = generate_ml_recommendation(
                     osa_probability, risk_level, age, bmi, neck_cm, 
                     hypertension, diabetes, smokes, alcohol, 
-                    ess_score, berlin_score, stopbang_score
+                    ess_score, berlin_score_binary, stopbang_score,
+                    sleep_duration, daily_steps
                 )
             except Exception as e:
                 print(f"❌ Prediction error: {e}")
@@ -1087,12 +1083,24 @@ def submit_survey():
                         osa_probability = ?, risk_level = ?,
                         daily_steps = ?, average_daily_steps = ?, sleep_duration_hours = ?,
                         weekly_steps_json = ?, weekly_sleep_json = ?,
+                        snoring_level = ?, snoring_frequency = ?, snoring_bothers_others = ?,
+                        tired_during_day = ?, tired_after_sleep = ?, feels_sleepy_daytime = ?,
+                        nodded_off_driving = ?, physical_activity_time = ?,
+                        ess_sitting_reading = ?, ess_watching_tv = ?, ess_public_sitting = ?,
+                        ess_passenger_car = ?, ess_lying_down_afternoon = ?, ess_talking = ?,
+                        ess_after_lunch = ?, ess_traffic_stop = ?,
                         completed_at = CURRENT_TIMESTAMP
                     WHERE user_id = ?
                 ''', (age, demo.get('sex', 'male'), height_cm, weight_kg, neck_cm, bmi,
                       hypertension, diabetes, smokes, alcohol,
                       ess_score, berlin_score_binary, stopbang_score, osa_probability, risk_level,
                       daily_steps, average_daily_steps, sleep_duration, weekly_steps_json, weekly_sleep_json,
+                      snoring_level, snoring_frequency, snoring_bothers_others,
+                      tired_during_day, tired_after_sleep, feels_sleepy_daytime,
+                      nodded_off_driving, physical_activity_time,
+                      ess_sitting_reading, ess_watching_tv, ess_public_sitting,
+                      ess_passenger_car, ess_lying_down_afternoon, ess_talking,
+                      ess_after_lunch, ess_traffic_stop,
                       user_id))
                 
                 rows_affected = cursor.rowcount
@@ -1114,12 +1122,25 @@ def submit_survey():
                      hypertension, diabetes, smokes, alcohol,
                      ess_score, berlin_score, stopbang_score, osa_probability, risk_level,
                      daily_steps, average_daily_steps, sleep_duration_hours,
-                     weekly_steps_json, weekly_sleep_json)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     weekly_steps_json, weekly_sleep_json,
+                     snoring_level, snoring_frequency, snoring_bothers_others,
+                     tired_during_day, tired_after_sleep, feels_sleepy_daytime,
+                     nodded_off_driving, physical_activity_time,
+                     ess_sitting_reading, ess_watching_tv, ess_public_sitting,
+                     ess_passenger_car, ess_lying_down_afternoon, ess_talking,
+                     ess_after_lunch, ess_traffic_stop)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (user_id, age, demo.get('sex', 'male'), height_cm, weight_kg, neck_cm, bmi,
                       hypertension, diabetes, smokes, alcohol,
                       ess_score, berlin_score_binary, stopbang_score, osa_probability, risk_level,
-                      daily_steps, average_daily_steps, sleep_duration, weekly_steps_json, weekly_sleep_json))
+                      daily_steps, average_daily_steps, sleep_duration, weekly_steps_json, weekly_sleep_json,
+                      snoring_level, snoring_frequency, snoring_bothers_others,
+                      tired_during_day, tired_after_sleep, feels_sleepy_daytime,
+                      nodded_off_driving, physical_activity_time,
+                      ess_sitting_reading, ess_watching_tv, ess_public_sitting,
+                      ess_passenger_car, ess_lying_down_afternoon, ess_talking,
+                      ess_after_lunch, ess_traffic_stop))
                 survey_id = cursor.lastrowid
                 print(f"✅ Created new survey (ID: {survey_id}) for user {user_id}")
             
@@ -1230,13 +1251,19 @@ def predict_osa_risk():
         # Determine risk level
         if y_prob < 0.3:
             risk_level = "Low Risk"
-            recommendation = "Your OSA risk is low. Continue maintaining healthy sleep habits."
         elif y_prob < 0.6:
             risk_level = "Moderate Risk"
-            recommendation = "You have moderate OSA risk. Consider consulting a sleep specialist."
         else:
             risk_level = "High Risk"
-            recommendation = "You have high OSA risk. We strongly recommend consulting a sleep specialist soon."
+        
+        # Generate comprehensive recommendations
+        recommendation = generate_ml_recommendation(
+            y_prob, risk_level, 
+            data['Age'], data['BMI'], data['Neck_Circumference'],
+            data['Hypertension'], data['Diabetes'], data['Smokes'], data['Alcohol'],
+            data['Epworth_Score'], data['Berlin_Score'], data['STOPBANG_Total'],
+            data['Sleep_Duration'], data['Daily_Steps']
+        )
         
         # Return prediction result
         return jsonify({
@@ -1683,13 +1710,14 @@ def generate_pdf_report():
         neck_large = neck_cm >= 40 if sex == 'Male' else neck_cm >= 35
         gender_male = (sex == 'Male')
         
-        # Determine recommendation
-        if osa_probability >= 0.7:
-            recommendation = 'HIGH RISK: Immediate sleep specialist consultation recommended'
-        elif osa_probability >= 0.4:
-            recommendation = 'MODERATE RISK: Schedule sleep specialist appointment within 2-4 weeks'
-        else:
-            recommendation = 'LOW RISK: Continue healthy sleep habits'
+        # Generate comprehensive recommendations using the recommendation engine
+        sex_binary = 1 if sex == 'Male' else 0
+        recommendation = generate_ml_recommendation(
+            osa_probability, risk_level, age, bmi, neck_cm,
+            hypertension, diabetes, smokes, alcohol,
+            ess_score, berlin_score, stopbang_score,
+            sleep_duration_hours, daily_steps
+        )
         
         # Build data dictionary for PDF generator
         pdf_data = {

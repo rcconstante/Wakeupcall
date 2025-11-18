@@ -60,7 +60,16 @@ data class MedicalHistory(
 data class SurveyResponses(
     @SerializedName("ess_responses") val essResponses: List<Int>, // 8 values, 0-3 each
     @SerializedName("berlin_responses") val berlinResponses: BerlinResponses,
-    @SerializedName("stopbang_responses") val stopbangResponses: StopBangResponses
+    @SerializedName("stopbang_responses") val stopbangResponses: StopBangResponses,
+    // Additional questionnaire fields
+    @SerializedName("snoring_level") val snoringLevel: String? = null,
+    @SerializedName("snoring_frequency") val snoringFrequency: String? = null,
+    @SerializedName("snoring_bothers_others") val snoringBothersOthers: Boolean? = null,
+    @SerializedName("tired_during_day") val tiredDuringDay: String? = null,
+    @SerializedName("tired_after_sleep") val tiredAfterSleep: String? = null,
+    @SerializedName("feels_sleepy_daytime") val feelsSleepyDaytime: Boolean? = null,
+    @SerializedName("nodded_off_driving") val noddedOffDriving: Boolean? = null,
+    @SerializedName("physical_activity_time") val physicalActivityTime: String? = null
 )
 
 data class BerlinResponses(
