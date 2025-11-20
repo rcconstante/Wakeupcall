@@ -11,6 +11,14 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 from recommendation_engine import RecommendationEngine
 
+# Try joblib first (more compatible with scikit-learn models), fall back to pickle
+try:
+    import joblib
+    USE_JOBLIB = True
+except ImportError:
+    USE_JOBLIB = False
+    print("⚠️ joblib not installed, using pickle (may have compatibility issues with newer Python versions)")
+
 app = Flask(__name__)
 app.config['SECRET_KEY'] = secrets.token_hex(32)
 CORS(app)  # Enable CORS for Android app to access the API
@@ -135,15 +143,19 @@ def require_auth(f):
     
     return decorated_function
 
-# Load the trained model and scaler
-# The lgbm_model.pkl contains the model, scaler is separate
+# Load the trained model pipeline
+# Using final_lgbm_pipeline.pkl which contains the complete pipeline
 model = None
 scaler = None
 
-# Model paths
+# Model paths - prioritize final_lgbm_pipeline.pkl
 MODEL_PATHS = [
-    os.path.join(os.path.dirname(__file__), 'lgbm_model.pkl'),  # backend folder
-    os.path.join(os.path.dirname(__file__), '..', 'model', 'lgbm_model.pkl'),  # model folder
+    os.path.join(os.path.dirname(__file__), 'WakeUpCall_3Class5Fold_Pipeline.pkl'),  # backend folder - TRY FIRST
+    os.path.join(os.path.dirname(__file__), '..', 'model', 'WakeUpCall_3Class5Fold_Pipeline.pkl'),  # model folder
+    os.path.join(os.path.dirname(__file__), 'final_lgbm_pipeline.pkl'),  # fallback (works, but has 14 features)
+    os.path.join(os.path.dirname(__file__), '..', 'model', 'final_lgbm_pipeline.pkl'),  # fallback
+    os.path.join(os.path.dirname(__file__), 'lgbm_model.pkl'),  # fallback
+    os.path.join(os.path.dirname(__file__), '..', 'model', 'lgbm_model.pkl'),  # fallback
 ]
 
 SCALER_PATHS = [
@@ -155,8 +167,11 @@ SCALER_PATHS = [
 for model_path in MODEL_PATHS:
     if os.path.exists(model_path):
         try:
-            with open(model_path, 'rb') as f:
-                loaded_data = pickle.load(f)
+            if USE_JOBLIB:
+                loaded_data = joblib.load(model_path)
+            else:
+                with open(model_path, 'rb') as f:
+                    loaded_data = pickle.load(f)
             
             # Check if it's a dict with model and scaler
             if isinstance(loaded_data, dict):
@@ -165,7 +180,7 @@ for model_path in MODEL_PATHS:
                     scaler = loaded_data.get('scaler')
                 print(f"✅ Model loaded from dictionary: {model_path}")
             else:
-                # It's just the model object
+                # It's just the model object (pipeline)
                 model = loaded_data
                 print(f"✅ Model loaded from: {model_path}")
             
@@ -173,13 +188,27 @@ for model_path in MODEL_PATHS:
                 break
         except Exception as e:
             print(f"⚠️ Error loading model from {model_path}: {e}")
+            # Try with pickle and latin1 encoding for compatibility
+            if 'WakeUpCall_3Class5Fold' in model_path:
+                try:
+                    print(f"   Attempting compatibility mode for {os.path.basename(model_path)}...")
+                    with open(model_path, 'rb') as f:
+                        loaded_data = pickle.load(f, encoding='latin1')
+                    model = loaded_data
+                    print(f"✅ Model loaded with compatibility mode: {model_path}")
+                    break
+                except Exception as e2:
+                    print(f"   Compatibility mode also failed: {e2}")
 
-# Load scaler separately
+# Load scaler separately (optional, for backwards compatibility with old models)
 for scaler_path in SCALER_PATHS:
     if os.path.exists(scaler_path):
         try:
-            with open(scaler_path, 'rb') as f:
-                scaler = pickle.load(f)
+            if USE_JOBLIB:
+                scaler = joblib.load(scaler_path)
+            else:
+                with open(scaler_path, 'rb') as f:
+                    scaler = pickle.load(f)
             print(f"✅ Scaler loaded from: {scaler_path}")
             break
         except Exception as e:
@@ -305,19 +334,18 @@ def calculate_top_risk_factors(input_features, osa_probability):
     
     return formatted_factors
 
-# Feature list (must match training order)
+# Feature list (must match final_lgbm_pipeline.pkl training order)
+# Based on sample input: Age, Sex, BMI, Neck_Circumference, Hypertension, Diabetes,
+# Smokes, Alcohol, Snoring, Sleepiness, Epworth_Score, Berlin_Score, STOPBANG_Total, SleepQuality
 FEATURES = [
     'Age', 'Sex', 'BMI', 'Neck_Circumference', 'Hypertension', 'Diabetes',
     'Smokes', 'Alcohol', 'Snoring', 'Sleepiness',
-    'Epworth_Score', 'Berlin_Score', 'STOPBANG_Total',
-    'SleepQuality_Proxy_0to10', 'Sleep_Duration',
-    'Physical_Activity_Level', 'Daily_Steps'
+    'Epworth_Score', 'Berlin_Score', 'STOPBANG_Total'
 ]
 
-# Columns to scale (numerical features)
+# Columns to scale (numerical features) - pipeline handles scaling internally
 NUM_COLS = [
-    'Age', 'BMI', 'Neck_Circumference', 'Epworth_Score', 'STOPBANG_Total',
-    'SleepQuality_Proxy_0to10', 'Sleep_Duration', 'Physical_Activity_Level', 'Daily_Steps'
+    'Age', 'BMI', 'Neck_Circumference', 'Epworth_Score', 'STOPBANG_Total'
 ]
 
 
@@ -990,10 +1018,10 @@ def submit_survey():
         # Convert Berlin score to binary (0 = low risk, 1 = high risk)
         berlin_score_binary = 1 if berlin_score >= 2 else 0
         
-        # Build feature dictionary for ML model
+        # Build feature dictionary for ML model (13 features for WakeUpCall_3Class5Fold_Pipeline.pkl)
         input_features = {
             'Age': age,
-            'Sex': sex,
+            'Sex': sex,  # Already binary: 1=male, 0=female
             'BMI': bmi,
             'Neck_Circumference': neck_cm,
             'Hypertension': hypertension,
@@ -1004,11 +1032,7 @@ def submit_survey():
             'Sleepiness': sleepiness,
             'Epworth_Score': ess_score,
             'Berlin_Score': berlin_score_binary,
-            'STOPBANG_Total': stopbang_score,
-            'SleepQuality_Proxy_0to10': sleep_quality,
-            'Sleep_Duration': sleep_duration,
-            'Physical_Activity_Level': activity_level,
-            'Daily_Steps': daily_steps
+            'STOPBANG_Total': stopbang_score
         }
         
         # Make prediction if model is loaded
@@ -1201,28 +1225,24 @@ def predict_osa_risk():
     
     Expected JSON input:
     {
-        "Age": 45,
+        "Age": 52,
         "Sex": 1,  # 1=Male, 0=Female
-        "BMI": 31.5,
-        "Neck_Circumference": 42,
+        "BMI": 36,
+        "Neck_Circumference": 43,
         "Hypertension": 1,  # 1=Yes, 0=No
         "Diabetes": 0,
         "Smokes": 0,
         "Alcohol": 1,
         "Snoring": 1,
         "Sleepiness": 1,
-        "Epworth_Score": 14,
+        "Epworth_Score": 16,
         "Berlin_Score": 1,  # 1=High, 0=Low
-        "STOPBANG_Total": 5,
-        "SleepQuality_Proxy_0to10": 4,
-        "Sleep_Duration": 6.5,  # hours
-        "Physical_Activity_Level": 2,  # 1-10 scale
-        "Daily_Steps": 8000
+        "STOPBANG_Total": 6
     }
     """
-    if model is None or scaler is None:
+    if model is None:
         return jsonify({
-            'error': 'Model not loaded. Please train the model first.',
+            'error': 'Model not loaded. Please check model file.',
             'success': False
         }), 500
     
@@ -1241,8 +1261,7 @@ def predict_osa_risk():
         # Create DataFrame with correct feature order
         X_input = pd.DataFrame([{f: data[f] for f in FEATURES}])
         
-        # Scale numerical columns
-        X_input[NUM_COLS] = scaler.transform(X_input[NUM_COLS])
+        # Pipeline handles scaling internally - no separate scaling needed
         
         # Get prediction probability
         y_prob = model.predict_proba(X_input)[:, 1][0]
@@ -1256,13 +1275,13 @@ def predict_osa_risk():
         else:
             risk_level = "High Risk"
         
-        # Generate comprehensive recommendations
+        # Generate comprehensive recommendations (use defaults for non-model features)
         recommendation = generate_ml_recommendation(
             y_prob, risk_level, 
             data['Age'], data['BMI'], data['Neck_Circumference'],
             data['Hypertension'], data['Diabetes'], data['Smokes'], data['Alcohol'],
             data['Epworth_Score'], data['Berlin_Score'], data['STOPBANG_Total'],
-            data['Sleep_Duration'], data['Daily_Steps']
+            data.get('Sleep_Duration', 7.0), data.get('Daily_Steps', 5000)
         )
         
         # Return prediction result
@@ -1463,17 +1482,13 @@ def predict_from_google_fit():
             'Epworth_Score': epworth_score,
             'Berlin_Score': berlin_score,
             'STOPBANG_Total': stopbang_total,
-            'SleepQuality_Proxy_0to10': sleep_quality,
-            'Sleep_Duration': data['sleep_duration_hours'],
-            'Physical_Activity_Level': activity_level,
-            'Daily_Steps': steps
+            'SleepQuality': sleep_quality  # Renamed to match pipeline
         }
         
         # Create DataFrame
         X_input = pd.DataFrame([{f: input_features[f] for f in FEATURES}])
         
-        # Scale numerical columns
-        X_input[NUM_COLS] = scaler.transform(X_input[NUM_COLS])
+        # Pipeline handles scaling internally, no need to scale separately
         
         # Get prediction
         y_prob = model.predict_proba(X_input)[:, 1][0]
