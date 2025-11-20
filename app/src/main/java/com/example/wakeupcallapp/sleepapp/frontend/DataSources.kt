@@ -1,6 +1,7 @@
 package com.example.wakeupcallapp.sleepapp
 
 import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -25,36 +26,36 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.example.wakeupcallapp.sleepapp.R
-import com.example.wakeupcallapp.sleepapp.viewmodel.GoogleFitViewModel
+import com.example.wakeupcallapp.sleepapp.viewmodel.HealthConnectViewModel
 import com.example.wakeupcallapp.sleepapp.viewmodel.AuthViewModel
 
 @Composable
 fun DataSourcesScreen(
     navController: NavController,
-    googleFitViewModel: GoogleFitViewModel = viewModel(),
+    healthConnectViewModel: HealthConnectViewModel = viewModel(),
     authViewModel: AuthViewModel = viewModel()
 ) {
     val context = LocalContext.current
-    val isGoogleFitConnected by googleFitViewModel.isConnected.collectAsState()
-    val fitData by googleFitViewModel.fitData.collectAsState()
-    val isLoading by googleFitViewModel.isLoading.collectAsState()
+    val isHealthConnected by healthConnectViewModel.isConnected.collectAsState()
+    val healthData by healthConnectViewModel.healthData.collectAsState()
+    val isLoading by healthConnectViewModel.isLoading.collectAsState()
     val currentUser by authViewModel.currentUser.collectAsState()
+    
+    // Permission launcher for Health Connect
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = healthConnectViewModel.getPermissionContract()
+    ) { grantedPermissions ->
+        healthConnectViewModel.onPermissionResult(grantedPermissions)
+    }
     
     // Check connection status when screen loads
     LaunchedEffect(currentUser) {
-        // Set userId for Google Fit
+        // Set userId for Health Connect
         currentUser?.let { user ->
-            googleFitViewModel.setUserId(user.id.toString())
+            healthConnectViewModel.setUserId(user.id.toString())
         }
         
-        googleFitViewModel.checkConnectionStatus()
-        
-        // Set up callback for permission result
-        (context as? MainActivity)?.let { activity ->
-            MainActivity.onGoogleFitPermissionResult = { granted ->
-                googleFitViewModel.onPermissionResult(granted)
-            }
-        }
+        healthConnectViewModel.checkConnectionStatus()
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -104,7 +105,7 @@ fun DataSourcesScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Google Fit Card
+            // Health Connect Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(24.dp),
@@ -124,7 +125,7 @@ fun DataSourcesScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.weight(1f)
                         ) {
-                            // Google Fit Icon
+                            // Health Connect Icon
                             Card(
                                 modifier = Modifier.size(50.dp),
                                 shape = CircleShape,
@@ -145,14 +146,14 @@ fun DataSourcesScreen(
 
                             Column {
                                 Text(
-                                    text = "Google Fit",
+                                    text = "Health Connect",
                                     fontSize = 18.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
                                 )
                                 Text(
-                                    text = if (isGoogleFitConnected) {
-                                        fitData?.let { 
+                                    text = if (isHealthConnected) {
+                                        healthData?.let { 
                                             "${it.dailySteps} steps today"
                                         } ?: "Connected"
                                     } else {
@@ -167,18 +168,16 @@ fun DataSourcesScreen(
                         // Disconnect/Connect Button
                         Button(
                             onClick = {
-                                if (isGoogleFitConnected) {
-                                    googleFitViewModel.disconnect()
+                                if (isHealthConnected) {
+                                    healthConnectViewModel.disconnect()
                                 } else {
-                                    // Request permissions
-                                    (context as? MainActivity)?.let { activity ->
-                                        googleFitViewModel.getManager().requestPermissions(activity)
-                                    }
+                                    // Request permissions using the launcher
+                                    permissionLauncher.launch(healthConnectViewModel.getPermissions())
                                 }
                             },
                             enabled = !isLoading,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isGoogleFitConnected)
+                                containerColor = if (isHealthConnected)
                                     Color.White.copy(alpha = 0.9f)
                                 else
                                     Color(0xFF6B8DD6)
@@ -189,15 +188,15 @@ fun DataSourcesScreen(
                             if (isLoading) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(16.dp),
-                                    color = if (isGoogleFitConnected) Color(0xFF6B8DD6) else Color.White,
+                                    color = if (isHealthConnected) Color(0xFF6B8DD6) else Color.White,
                                     strokeWidth = 2.dp
                                 )
                             } else {
                                 Text(
-                                    text = if (isGoogleFitConnected) "Disconnect" else "Connect",
+                                    text = if (isHealthConnected) "Disconnect" else "Connect",
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = if (isGoogleFitConnected)
+                                    color = if (isHealthConnected)
                                         Color(0xFF6B8DD6)
                                     else
                                         Color.White

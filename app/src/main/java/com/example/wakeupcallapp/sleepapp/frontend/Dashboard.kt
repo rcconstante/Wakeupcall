@@ -29,8 +29,9 @@ import com.example.wakeupcallapp.sleepapp.R
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.wakeupcallapp.sleepapp.viewmodel.AuthViewModel
 import com.example.wakeupcallapp.sleepapp.viewmodel.SurveyViewModel
-import com.example.wakeupcallapp.sleepapp.viewmodel.GoogleFitViewModel
+import com.example.wakeupcallapp.sleepapp.viewmodel.HealthConnectViewModel
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
@@ -376,15 +377,15 @@ fun DashboardScreen(
     navController: NavController,
     authViewModel: AuthViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity),
     surveyViewModel: SurveyViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity),
-    googleFitViewModel: GoogleFitViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity),
+    healthConnectViewModel: HealthConnectViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity),
     onSignOut: () -> Unit = {}
 ) {
     val currentUser by authViewModel.currentUser.collectAsState()
     val authToken by authViewModel.authToken.collectAsState()
     val submissionResult by surveyViewModel.submissionResult.collectAsState()
     val isLoadingSurvey by surveyViewModel.isLoadingSurvey.collectAsState()
-    val fitData by googleFitViewModel.fitData.collectAsState()
-    val isFitConnected by googleFitViewModel.isConnected.collectAsState()
+    val healthData by healthConnectViewModel.healthData.collectAsState()
+    val isHealthConnected by healthConnectViewModel.isConnected.collectAsState()
     var isDrawerOpen by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     
@@ -392,22 +393,29 @@ fun DashboardScreen(
     
     val hasLoadedData by surveyViewModel.hasLoadedData.collectAsState()
     
-    // Load survey data and Google Fit data when an auth token becomes available
+    // Permission launcher for Health Connect
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = healthConnectViewModel.getPermissionContract()
+    ) { grantedPermissions ->
+        healthConnectViewModel.onPermissionResult(grantedPermissions)
+    }
+    
+    // Load survey data and Health Connect data when an auth token becomes available
     LaunchedEffect(authToken, hasLoadedData, currentUser) {
         android.util.Log.d("Dashboard", "🎯 Dashboard LaunchedEffect - token=${authToken?.take(20)}, hasLoaded=$hasLoadedData")
         val token = authToken ?: return@LaunchedEffect
         
-        // Set userId for Google Fit
+        // Set userId for Health Connect
         currentUser?.let { user ->
-            googleFitViewModel.setUserId(user.id.toString())
-            android.util.Log.d("Dashboard", "📋 Set Google Fit userId: ${user.id}")
+            healthConnectViewModel.setUserId(user.id.toString())
+            android.util.Log.d("Dashboard", "📋 Set Health Connect userId: ${user.id}")
         }
         
         if (!hasLoadedData) {
             android.util.Log.d("Dashboard", "🔄 Fetching latest survey for dashboard")
             surveyViewModel.loadExistingSurvey(token)
         }
-        googleFitViewModel.checkConnectionStatus()
+        healthConnectViewModel.checkConnectionStatus()
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -428,7 +436,7 @@ fun DashboardScreen(
                     android.util.Log.d("Dashboard", "🔄 Reloading survey data...")
                     surveyViewModel.loadExistingSurvey(token)
                 }
-                googleFitViewModel.fetchFitnessData()
+                healthConnectViewModel.fetchHealthData()
             }
         ) {
             // Scrollable Content
@@ -759,9 +767,9 @@ fun DashboardScreen(
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
-                        if (isFitConnected) {
+                        if (isHealthConnected) {
                             Text(
-                                text = "Google Fit",
+                                text = "Sync",
                                 fontSize = 12.sp,
                                 color = Color(0xFF4CAF50),
                                 fontWeight = FontWeight.Medium
@@ -771,8 +779,8 @@ fun DashboardScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    val hasValidData = fitData != null && 
-                        (fitData!!.averageDailySteps > 0 || fitData!!.sleepDurationHours > 0.0)
+                    val hasValidData = healthData != null && 
+                        (healthData!!.averageDailySteps > 0 || healthData!!.sleepDurationHours > 0.0)
                     
                     if (hasValidData) {
                         // Daily Steps Chart
@@ -785,7 +793,7 @@ fun DashboardScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                         
                         DashboardStepsChart(
-                            stepsData = fitData!!.weeklyStepsData,
+                            stepsData = healthData!!.weeklyStepsData,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(150.dp)
@@ -794,7 +802,7 @@ fun DashboardScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         
                         Text(
-                            text = "Avg: ${fitData!!.averageDailySteps} steps/day",
+                            text = "Avg: ${healthData!!.averageDailySteps} steps/day",
                             fontSize = 13.sp,
                             color = Color.White.copy(alpha = 0.8f)
                         )
@@ -811,7 +819,7 @@ fun DashboardScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                         
                         DashboardSleepChart(
-                            sleepData = fitData!!.weeklySleepData,
+                            sleepData = healthData!!.weeklySleepData,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(150.dp)
@@ -820,7 +828,7 @@ fun DashboardScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         
                         Text(
-                            text = "Avg: ${String.format("%.1f", fitData!!.sleepDurationHours)}h/night",
+                            text = "Avg: ${String.format("%.1f", healthData!!.sleepDurationHours)}h/night",
                             fontSize = 13.sp,
                             color = Color.White.copy(alpha = 0.8f)
                         )
@@ -838,15 +846,15 @@ fun DashboardScreen(
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
                                     text = when {
-                                        !isFitConnected -> "Connect Google Fit"
-                                        fitData == null -> "Loading data..."
+                                        !isHealthConnected -> "Connect Health Connect"
+                                        healthData == null -> "Loading data..."
                                         else -> "No data yet"
                                     },
                                     fontSize = 14.sp,
                                     color = Color.White.copy(alpha = 0.6f)
                                 )
                                 
-                                if (!isFitConnected) {
+                                if (!isHealthConnected) {
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Text(
                                         text = "Visit Profile to connect",
@@ -855,7 +863,7 @@ fun DashboardScreen(
                                     )
                                 }
                                 
-                                if (isFitConnected && fitData != null) {
+                                if (isHealthConnected && healthData != null) {
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Text(
                                         text = "No activity data found",
@@ -864,15 +872,15 @@ fun DashboardScreen(
                                     )
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        text = "Open Google Fit app to start tracking",
+                                        text = "Open a health app to start tracking",
                                         fontSize = 11.sp,
                                         color = Color.White.copy(alpha = 0.4f)
                                     )
                                     Spacer(modifier = Modifier.height(12.dp))
                                     Button(
                                         onClick = { 
-                                            // Trigger a refresh of Google Fit data
-                                            googleFitViewModel.fetchFitnessData()
+                                            // Trigger a refresh of Health Connect data
+                                            healthConnectViewModel.fetchHealthData()
                                         },
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = Color(0xFF4CAF50)

@@ -27,7 +27,7 @@ import com.example.wakeupcallapp.sleepapp.R
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.wakeupcallapp.sleepapp.viewmodel.AuthViewModel
 import com.example.wakeupcallapp.sleepapp.viewmodel.SurveyViewModel
-import com.example.wakeupcallapp.sleepapp.viewmodel.GoogleFitViewModel
+import com.example.wakeupcallapp.sleepapp.viewmodel.HealthConnectViewModel
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.getValue
@@ -46,14 +46,14 @@ fun ProfileScreen(
     navController: NavController,
     authViewModel: AuthViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity),
     surveyViewModel: SurveyViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity),
-    googleFitViewModel: GoogleFitViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity)
+    healthConnectViewModel: HealthConnectViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity)
 ) {
     val currentUser by authViewModel.currentUser.collectAsState()
     val authToken by authViewModel.authToken.collectAsState()
     val submissionResult by surveyViewModel.submissionResult.collectAsState()
     val isLoadingSurvey by surveyViewModel.isLoadingSurvey.collectAsState()
-    val fitData by googleFitViewModel.fitData.collectAsState()
-    val isGoogleFitConnected by googleFitViewModel.isConnected.collectAsState()
+    val healthData by healthConnectViewModel.healthData.collectAsState()
+    val isHealthConnected by healthConnectViewModel.isConnected.collectAsState()
     val hasLoadedData by surveyViewModel.hasLoadedData.collectAsState()
     
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing = isLoadingSurvey)
@@ -66,7 +66,7 @@ fun ProfileScreen(
             android.util.Log.d("Profile", "🔄 Fetching latest survey for profile")
             surveyViewModel.loadExistingSurvey(token)
         }
-        googleFitViewModel.checkConnectionStatus()
+        healthConnectViewModel.checkConnectionStatus()
     }
     
     Box(modifier = Modifier.fillMaxSize()) {
@@ -87,8 +87,8 @@ fun ProfileScreen(
                     android.util.Log.d("Profile", "🔄 Reloading survey data...")
                     surveyViewModel.loadExistingSurvey(token)
                 }
-                googleFitViewModel.checkConnectionStatus()
-                googleFitViewModel.fetchFitnessData()
+                healthConnectViewModel.checkConnectionStatus()
+                healthConnectViewModel.fetchHealthData()
             }
         ) {
             // Scrollable Content
@@ -297,8 +297,78 @@ fun ProfileScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Google Fit Data Status Message
-            if (isGoogleFitConnected && (fitData == null || (fitData!!.averageDailySteps == 0 && fitData!!.sleepDurationHours == 0.0))) {
+            // Health Connect Profile Card
+            if (isHealthConnected) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0x60FFFFFF))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp)
+                    ) {
+                        Text(
+                            text = "Health Connect Profile",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                HealthInfoItem(
+                                    "Active Calories:",
+                                    healthData?.let { String.format("%.1f kcal", it.activeCaloriesBurned) } ?: "--"
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                HealthInfoItem(
+                                    "Activity Intensity:",
+                                    healthData?.activityIntensity ?: "--"
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                HealthInfoItem(
+                                    "Weight:",
+                                    healthData?.let { 
+                                        if (it.weightKg > 0) String.format("%.1f kg", it.weightKg) else "--"
+                                    } ?: "--"
+                                )
+                            }
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                HealthInfoItem(
+                                    "Total Calories:",
+                                    healthData?.let { String.format("%.1f kcal", it.totalCaloriesBurned) } ?: "--"
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                HealthInfoItem(
+                                    "Height:",
+                                    healthData?.let { 
+                                        if (it.heightCm > 0) String.format("%.0f cm", it.heightCm) else "--"
+                                    } ?: "--"
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                HealthInfoItem(
+                                    "Distance:",
+                                    healthData?.let { 
+                                        if (it.distanceMeters > 0) String.format("%.2f km", it.distanceMeters / 1000.0) else "--"
+                                    } ?: "--"
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // Health Connect Data Status Message
+            if (isHealthConnected && (healthData == null || (healthData!!.averageDailySteps == 0 && healthData!!.sleepDurationHours == 0.0))) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(24.dp),
@@ -311,7 +381,7 @@ fun ProfileScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "📊 Google Fit Data",
+                            text = "📊 Health Connect Data",
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -336,12 +406,12 @@ fun ProfileScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         
                         Text(
-                            text = "1. Open the Google Fit app",
+                            text = "1. Open a health tracking app",
                             fontSize = 13.sp,
                             color = Color.White.copy(alpha = 0.6f)
                         )
                         Text(
-                            text = "2. Ensure it's tracking your steps and sleep",
+                            text = "2. Ensure it's writing data to Health Connect",
                             fontSize = 13.sp,
                             color = Color.White.copy(alpha = 0.6f)
                         )
@@ -355,7 +425,7 @@ fun ProfileScreen(
                         
                         Button(
                             onClick = { 
-                                googleFitViewModel.fetchFitnessData()
+                                healthConnectViewModel.fetchHealthData()
                             },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = Color(0xFF4CAF50)
@@ -378,8 +448,8 @@ fun ProfileScreen(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // Weekly Sleep Chart from Google Fit
-            if (isGoogleFitConnected && fitData != null && (fitData!!.averageDailySteps > 0 || fitData!!.sleepDurationHours > 0.0)) {
+            // Weekly Sleep Chart from Health Connect
+            if (isHealthConnected && healthData != null && (healthData!!.averageDailySteps > 0 || healthData!!.sleepDurationHours > 0.0)) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(24.dp),
@@ -402,7 +472,7 @@ fun ProfileScreen(
                                 color = Color.White
                             )
                             Text(
-                                text = "Google Fit",
+                                text = "Sync",
                                 fontSize = 12.sp,
                                 color = Color.White.copy(alpha = 0.7f)
                             )
@@ -412,7 +482,7 @@ fun ProfileScreen(
 
                         // Sleep hours bar chart
                         SleepBarChart(
-                            sleepData = fitData!!.weeklySleepData,
+                            sleepData = healthData!!.weeklySleepData,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(200.dp)
@@ -422,7 +492,7 @@ fun ProfileScreen(
 
                         // Average sleep display
                         Text(
-                            text = "Average: ${String.format("%.1f", fitData!!.sleepDurationHours)} hours/night",
+                            text = "Average: ${String.format("%.1f", healthData!!.sleepDurationHours)} hours/night",
                             fontSize = 14.sp,
                             color = Color.White.copy(alpha = 0.9f),
                             fontWeight = FontWeight.Medium
@@ -433,8 +503,8 @@ fun ProfileScreen(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // Weekly Steps Chart from Google Fit
-            if (isGoogleFitConnected && fitData != null && (fitData!!.averageDailySteps > 0 || fitData!!.sleepDurationHours > 0.0)) {
+            // Weekly Steps Chart from Health Connect
+            if (isHealthConnected && healthData != null && (healthData!!.averageDailySteps > 0 || healthData!!.sleepDurationHours > 0.0)) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(24.dp),
@@ -457,7 +527,7 @@ fun ProfileScreen(
                                 color = Color.White
                             )
                             Text(
-                                text = "Google Fit",
+                                text = "Sync",
                                 fontSize = 12.sp,
                                 color = Color.White.copy(alpha = 0.7f)
                             )
@@ -467,7 +537,7 @@ fun ProfileScreen(
 
                         // Steps bar chart
                         StepsBarChart(
-                            stepsData = fitData!!.weeklyStepsData,
+                            stepsData = healthData!!.weeklyStepsData,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(200.dp)
@@ -477,7 +547,7 @@ fun ProfileScreen(
 
                         // Average steps display
                         Text(
-                            text = "Average: ${fitData!!.averageDailySteps} steps/day",
+                            text = "Average: ${healthData!!.averageDailySteps} steps/day",
                             fontSize = 14.sp,
                             color = Color.White.copy(alpha = 0.9f),
                             fontWeight = FontWeight.Medium

@@ -41,8 +41,20 @@ class Demographics : ComponentActivity() {
 fun DemographicsScreenContent(
     onNext: () -> Unit = {},
     onBack: () -> Unit = {},
-    surveyViewModel: com.example.wakeupcallapp.sleepapp.viewmodel.SurveyViewModel = androidx.lifecycle.viewmodel.compose.viewModel(viewModelStoreOwner = androidx.compose.ui.platform.LocalContext.current as androidx.activity.ComponentActivity)
+    surveyViewModel: com.example.wakeupcallapp.sleepapp.viewmodel.SurveyViewModel = androidx.lifecycle.viewmodel.compose.viewModel(viewModelStoreOwner = androidx.compose.ui.platform.LocalContext.current as androidx.activity.ComponentActivity),
+    healthConnectViewModel: com.example.wakeupcallapp.sleepapp.viewmodel.HealthConnectViewModel = androidx.lifecycle.viewmodel.compose.viewModel(viewModelStoreOwner = androidx.compose.ui.platform.LocalContext.current as androidx.activity.ComponentActivity)
 ) {
+    // Get Health Connect data
+    val healthData by healthConnectViewModel.healthData.collectAsState()
+    val isHealthConnected by healthConnectViewModel.isConnected.collectAsState()
+    
+    // Pre-fill survey data from Health Connect when data becomes available
+    LaunchedEffect(healthData, isHealthConnected) {
+        if (isHealthConnected && healthData != null) {
+            surveyViewModel.prefillFromHealthConnect(healthData)
+        }
+    }
+    
     // Collect current ViewModel values
     val currentAge by surveyViewModel.age.collectAsState()
     val currentSex by surveyViewModel.sex.collectAsState()

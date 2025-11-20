@@ -85,6 +85,8 @@ data class StopBangResponses(
     val hypertension: Boolean // This can match the medical history
 )
 
+// Using same name GoogleFitData for backend API compatibility
+// Data now comes from Health Connect instead of Google Fit
 data class GoogleFitData(
     @SerializedName("daily_steps") val dailySteps: Int,
     @SerializedName("average_daily_steps") val averageDailySteps: Int = dailySteps,
@@ -93,6 +95,18 @@ data class GoogleFitData(
     @SerializedName("weekly_sleep_data") val weeklySleepData: Map<String, Double> = emptyMap(),
     @SerializedName("last_sync_time") val lastSyncTime: Long = System.currentTimeMillis()
 )
+
+// Helper function to convert HealthConnectData to GoogleFitData for API
+fun com.example.wakeupcallapp.sleepapp.healthconnect.HealthConnectData.toGoogleFitData(): GoogleFitData {
+    return GoogleFitData(
+        dailySteps = this.dailySteps,
+        averageDailySteps = this.averageDailySteps,
+        sleepDurationHours = this.sleepDurationHours,
+        weeklyStepsData = this.weeklyStepsData,
+        weeklySleepData = this.weeklySleepData,
+        lastSyncTime = this.lastSyncTime
+    )
+}
 
 // ============ SURVEY RESPONSE MODELS ============
 

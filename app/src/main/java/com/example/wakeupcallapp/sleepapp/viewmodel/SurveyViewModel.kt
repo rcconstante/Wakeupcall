@@ -20,19 +20,19 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
     private val repository = ApiRepository()
     
     // ============ DEMOGRAPHICS ============
-    private val _age = MutableStateFlow(30)
+    private val _age = MutableStateFlow(0)
     val age: StateFlow<Int> = _age.asStateFlow()
     
-    private val _sex = MutableStateFlow("male")
+    private val _sex = MutableStateFlow("")
     val sex: StateFlow<String> = _sex.asStateFlow()
     
-    private val _heightCm = MutableStateFlow(170.0)
+    private val _heightCm = MutableStateFlow(0.0)
     val heightCm: StateFlow<Double> = _heightCm.asStateFlow()
     
-    private val _weightKg = MutableStateFlow(70.0)
+    private val _weightKg = MutableStateFlow(0.0)
     val weightKg: StateFlow<Double> = _weightKg.asStateFlow()
     
-    private val _neckCircumferenceCm = MutableStateFlow(37.0)
+    private val _neckCircumferenceCm = MutableStateFlow(0.0)
     val neckCircumferenceCm: StateFlow<Double> = _neckCircumferenceCm.asStateFlow()
     
     // ============ MEDICAL HISTORY ============
@@ -64,7 +64,7 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
     val berlinCategory3Sleepy: StateFlow<Boolean> = _berlinCategory3Sleepy.asStateFlow()
     
     // ============ SLEEP HABITS ============
-    private val _sleepHours = MutableStateFlow(7.0)
+    private val _sleepHours = MutableStateFlow(0.0)
     val sleepHours: StateFlow<Double> = _sleepHours.asStateFlow()
     
     private val _snores = MutableStateFlow(false)
@@ -101,7 +101,7 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
     val physicalActivityTime: StateFlow<String> = _physicalActivityTime.asStateFlow()
     
     // ============ GOOGLE FIT DATA ============
-    private val _dailySteps = MutableStateFlow(5000)
+    private val _dailySteps = MutableStateFlow(0)
     val dailySteps: StateFlow<Int> = _dailySteps.asStateFlow()
     
     // ============ SUBMISSION STATE ============
@@ -135,6 +135,54 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
         _isSubmitting.value = false
         _submissionResult.value = null
         _errorMessage.value = null
+    }
+    
+    /**
+     * Pre-fill survey data from Health Connect
+     * Updates relevant fields if Health Connect data is available
+     */
+    fun prefillFromHealthConnect(healthData: com.example.wakeupcallapp.sleepapp.healthconnect.HealthConnectData?) {
+        if (healthData == null) {
+            android.util.Log.d("SurveyViewModel", "⚠️ No Health Connect data to prefill")
+            return
+        }
+        
+        android.util.Log.d("SurveyViewModel", "🏥 Pre-filling survey from Health Connect data...")
+        
+        // Pre-fill weight if available
+        if (healthData.weightKg > 0) {
+            _weightKg.value = healthData.weightKg
+            android.util.Log.d("SurveyViewModel", "✅ Pre-filled weight: ${healthData.weightKg} kg")
+        }
+        
+        // Pre-fill height if available
+        if (healthData.heightCm > 0) {
+            _heightCm.value = healthData.heightCm
+            android.util.Log.d("SurveyViewModel", "✅ Pre-filled height: ${healthData.heightCm} cm")
+        }
+        
+        // Pre-fill sleep hours if available
+        if (healthData.sleepDurationHours > 0) {
+            _sleepHours.value = healthData.sleepDurationHours
+            android.util.Log.d("SurveyViewModel", "✅ Pre-filled sleep hours: ${healthData.sleepDurationHours}h")
+        }
+        
+        // Pre-fill daily steps if available
+        if (healthData.averageDailySteps > 0) {
+            _dailySteps.value = healthData.averageDailySteps
+            android.util.Log.d("SurveyViewModel", "✅ Pre-filled daily steps: ${healthData.averageDailySteps}")
+            
+            // Also update physical activity time based on steps
+            _physicalActivityTime.value = when {
+                healthData.averageDailySteps >= 10000 -> "60+ minutes"
+                healthData.averageDailySteps >= 7500 -> "30-60 minutes"
+                healthData.averageDailySteps >= 5000 -> "15-30 minutes"
+                else -> "Less than 15 minutes"
+            }
+            android.util.Log.d("SurveyViewModel", "✅ Pre-filled activity time: ${_physicalActivityTime.value}")
+        }
+        
+        android.util.Log.d("SurveyViewModel", "✅ Health Connect pre-fill completed")
     }
     
     fun updateDemographics(age: Int, sex: String, heightCm: Double, weightKg: Double, neckCm: Double) {
@@ -267,7 +315,7 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
     
     // ============ SUBMIT SURVEY ============
     
-    fun submitSurvey(authToken: String, googleFitViewModel: com.example.wakeupcallapp.sleepapp.viewmodel.GoogleFitViewModel? = null) {
+    fun submitSurvey(authToken: String, healthConnectViewModel: com.example.wakeupcallapp.sleepapp.viewmodel.HealthConnectViewModel? = null) {
         viewModelScope.launch {
             _isSubmitting.value = true
             _errorMessage.value = null
@@ -328,28 +376,29 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
                     physicalActivityTime = _physicalActivityTime.value.takeIf { it.isNotEmpty() }
                 )
                 
-                // Build Google Fit data - include data from GoogleFitViewModel if available
-                val googleFit = if (googleFitViewModel != null) {
-                    val fitData = googleFitViewModel.fitData.value
-                    android.util.Log.d("SurveyViewModel", "📊 Google Fit data available: dailySteps=${fitData?.dailySteps}, sleepHours=${fitData?.sleepDurationHours}")
+                // Build health data - include data from HealthConnectViewModel if available
+                // Convert HealthConnectData to GoogleFitData for API compatibility
+                val googleFit = if (healthConnectViewModel != null) {
+                    val healthData = healthConnectViewModel.healthData.value
+                    android.util.Log.d("SurveyViewModel", "📊 Health Connect data available: dailySteps=${healthData?.dailySteps}, sleepHours=${healthData?.sleepDurationHours}")
                     
                     GoogleFitData(
                         dailySteps = _dailySteps.value,  // User input has priority
-                        averageDailySteps = fitData?.averageDailySteps ?: _dailySteps.value,
+                        averageDailySteps = healthData?.averageDailySteps ?: _dailySteps.value,
                         sleepDurationHours = _sleepHours.value,
-                        weeklyStepsData = fitData?.weeklyStepsData ?: emptyMap(),
-                        weeklySleepData = fitData?.weeklySleepData ?: emptyMap(),
-                        lastSyncTime = fitData?.lastSyncTime ?: System.currentTimeMillis()
+                        weeklyStepsData = healthData?.weeklyStepsData ?: emptyMap(),
+                        weeklySleepData = healthData?.weeklySleepData ?: emptyMap(),
+                        lastSyncTime = healthData?.lastSyncTime ?: System.currentTimeMillis()
                     )
                 } else {
-                    android.util.Log.d("SurveyViewModel", "⚠️ Google Fit ViewModel not provided, using minimal data")
+                    android.util.Log.d("SurveyViewModel", "⚠️ Health Connect ViewModel not provided, using minimal data")
                     GoogleFitData(
                         dailySteps = _dailySteps.value,
                         sleepDurationHours = _sleepHours.value
                     )
                 }
                 
-                android.util.Log.d("SurveyViewModel", "📤 Submitting survey with complete Google Fit data...")
+                android.util.Log.d("SurveyViewModel", "📤 Submitting survey with complete health data...")
                 
                 // Submit to backend
                 val result = repository.submitSurvey(

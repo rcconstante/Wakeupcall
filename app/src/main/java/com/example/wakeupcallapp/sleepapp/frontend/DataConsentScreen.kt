@@ -3,6 +3,7 @@ package com.example.wakeupcallapp.sleepapp
 import android.os.Bundle
 import com.example.wakeupcallapp.sleepapp.R
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.runtime.LaunchedEffect
 import androidx.activity.compose.setContent
 import androidx.compose.animation.core.*
@@ -45,30 +46,45 @@ fun DataConsentScreenContent(
     onGrantPermission: () -> Unit = {},
     onDeny: () -> Unit = {},
     surveyViewModel: SurveyViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity),
-    googleFitViewModel: com.example.wakeupcallapp.sleepapp.viewmodel.GoogleFitViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity),
+    healthConnectViewModel: com.example.wakeupcallapp.sleepapp.viewmodel.HealthConnectViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity),
     authViewModel: com.example.wakeupcallapp.sleepapp.viewmodel.AuthViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity)
 ) {
     val context = LocalContext.current
     val infiniteTransition = rememberInfiniteTransition(label = "infinite")
     val currentUser by authViewModel.currentUser.collectAsState()
+    val healthData by healthConnectViewModel.healthData.collectAsState()
+    val isHealthConnected by healthConnectViewModel.isConnected.collectAsState()
 
+    // Health Connect permission launcher
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = healthConnectViewModel.getPermissionContract()
+    ) { grantedPermissions ->
+        healthConnectViewModel.onPermissionResult(grantedPermissions)
+        
+        // Check if all permissions were granted
+        if (grantedPermissions.size == healthConnectViewModel.getPermissionsToRequest().size) {
+            // Fetch health data immediately after permissions are granted
+            healthConnectViewModel.fetchHealthData()
+        }
+    }
+    
+    // Monitor health data fetching and navigate when ready
+    LaunchedEffect(isHealthConnected, healthData) {
+        if (isHealthConnected && healthData != null) {
+            android.util.Log.d("DataConsent", "✅ Health Connect data fetched, pre-filling survey...")
+            // Pre-fill survey data from Health Connect
+            surveyViewModel.prefillFromHealthConnect(healthData)
+            // Navigate to survey
+            onGrantPermission()
+        }
+    }
+    
     LaunchedEffect(currentUser) {
         surveyViewModel.prepareForNewSurvey()
         
-        // Set userId for Google Fit
+        // Set userId for Health Connect
         currentUser?.let { user ->
-            googleFitViewModel.setUserId(user.id.toString())
-        }
-        
-        // Set up callback for permission result
-        (context as? MainActivity)?.let { activity ->
-            MainActivity.onGoogleFitPermissionResult = { granted ->
-                googleFitViewModel.onPermissionResult(granted)
-                // Navigate to next screen after permission handling
-                if (granted) {
-                    onGrantPermission()
-                }
-            }
+            healthConnectViewModel.setUserId(user.id.toString())
         }
     }
 
@@ -148,7 +164,7 @@ fun DataConsentScreenContent(
 
                     // Title
                     Text(
-                        text = "Connect to Google Fit",
+                        text = "Connect to Health Connect",
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
@@ -159,7 +175,7 @@ fun DataConsentScreenContent(
 
                     // Description
                     Text(
-                        text = "Allow WakeUp Call to access your activity and health data from Google Fit.",
+                        text = "Allow WakeUp Call to access your activity and sleep data from Health Connect.",
                         fontSize = 15.sp,
                         color = Color(0xFFE8EFFF),
                         textAlign = TextAlign.Center,
@@ -171,10 +187,8 @@ fun DataConsentScreenContent(
                     // Grant Permission Button
                     Button(
                         onClick = {
-                            // Request Google Fit permissions
-                            (context as? MainActivity)?.let { activity ->
-                                googleFitViewModel.getManager().requestPermissions(activity)
-                            }
+                            // Request Health Connect permissions
+                            permissionLauncher.launch(healthConnectViewModel.getPermissionsToRequest())
                         },
                         modifier = Modifier
                             .fillMaxWidth()

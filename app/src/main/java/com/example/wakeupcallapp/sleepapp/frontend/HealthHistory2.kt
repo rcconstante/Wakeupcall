@@ -43,19 +43,20 @@ class HealthHistory2 : ComponentActivity() {
 @Composable
 fun HealthHistory2ScreenContent(
     surveyViewModel: SurveyViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity),
-    googleFitViewModel: com.example.wakeupcallapp.sleepapp.viewmodel.GoogleFitViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity),
+    healthConnectViewModel: com.example.wakeupcallapp.sleepapp.viewmodel.HealthConnectViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity),
     onNext: () -> Unit = {},
     onBack: () -> Unit = {}
 ) {
-    // Get Google Fit data
-    val fitData by googleFitViewModel.fitData.collectAsState()
+    // Get Health Connect data
+    val healthData by healthConnectViewModel.healthData.collectAsState()
     val currentDailySteps by surveyViewModel.dailySteps.collectAsState()
+    val currentPhysicalActivityTime by surveyViewModel.physicalActivityTime.collectAsState()
     
-    // Initialize with Google Fit data or default, then allow user override
-    var stepCount by remember(fitData, currentDailySteps) { 
+    // Initialize with Health Connect data or default, then allow user override
+    var stepCount by remember(healthData, currentDailySteps) { 
         mutableStateOf(
             when {
-                fitData != null && fitData!!.dailySteps > 0 -> fitData!!.dailySteps.toString()
+                healthData != null && healthData!!.averageDailySteps > 0 -> healthData!!.averageDailySteps.toString()
                 currentDailySteps > 0 -> currentDailySteps.toString()
                 else -> ""
             }
@@ -64,7 +65,22 @@ fun HealthHistory2ScreenContent(
     var activityMinutes by remember { mutableStateOf("") }
     var activityType1 by remember { mutableStateOf("") }
     var activityType2 by remember { mutableStateOf("") }
-    var selectedTime by remember { mutableStateOf("") }
+    var selectedTime by remember(healthData, currentPhysicalActivityTime) { 
+        mutableStateOf(
+            if (currentPhysicalActivityTime.isNotEmpty()) {
+                currentPhysicalActivityTime
+            } else if (healthData != null && healthData!!.averageDailySteps > 0) {
+                when {
+                    healthData!!.averageDailySteps >= 10000 -> "60+ minutes"
+                    healthData!!.averageDailySteps >= 7500 -> "30-60 minutes"
+                    healthData!!.averageDailySteps >= 5000 -> "15-30 minutes"
+                    else -> "Less than 15 minutes"
+                }
+            } else {
+                ""
+            }
+        )
+    }
     var showError by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {

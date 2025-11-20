@@ -10,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.wakeupcallapp.sleepapp"
-        minSdk = 24
+        minSdk = 26
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
@@ -53,9 +53,8 @@ dependencies {
     // Material Design
     implementation("com.google.android.material:material:1.12.0")
 
-    // Google Fit + Auth (stable working versions)
-    implementation("com.google.android.gms:play-services-fitness:21.1.0")
-    implementation("com.google.android.gms:play-services-auth:21.1.0")
+    // Health Connect for health data (replaces Google Fit)
+    implementation("androidx.health.connect:connect-client:1.1.0-alpha08")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")

@@ -43,10 +43,26 @@ class SleepHabits1 : ComponentActivity() {
 @Composable
 fun SleepHabits1ScreenContent(
     surveyViewModel: SurveyViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity),
+    healthConnectViewModel: com.example.wakeupcallapp.sleepapp.viewmodel.HealthConnectViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity),
     onNext: () -> Unit = {},
     onBack: () -> Unit = {}
 ) {
-    var sleepHours by remember { mutableStateOf("") }
+    // Get Health Connect data
+    val healthData by healthConnectViewModel.healthData.collectAsState()
+    val currentSleepHours by surveyViewModel.sleepHours.collectAsState()
+    
+    // Initialize with Health Connect data if available, otherwise use ViewModel value
+    var sleepHours by remember(currentSleepHours, healthData) { 
+        mutableStateOf(
+            if (healthData != null && healthData!!.sleepDurationHours > 0) {
+                String.format("%.1f", healthData!!.sleepDurationHours)
+            } else if (currentSleepHours > 0) {
+                String.format("%.1f", currentSleepHours)
+            } else {
+                ""
+            }
+        )
+    }
     var doesSnore by remember { mutableStateOf("") }
     var snoringLevel by remember { mutableStateOf("") }
     var showError by remember { mutableStateOf(false) }
