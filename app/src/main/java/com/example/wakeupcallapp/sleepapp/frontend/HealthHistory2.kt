@@ -125,7 +125,7 @@ fun HealthHistory2ScreenContent(
 
                     // Step Count Field
                     Text(
-                        text = "Typical daily step-count:",
+                        text = "Typical daily step-count: *",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color.White
@@ -181,25 +181,67 @@ fun HealthHistory2ScreenContent(
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // Time of Day Question
+                    // Time of Day Question - now dropdown
                     Text(
-                        text = "At what time of day do you usually perform your physical activities?",
+                        text = "At what time of day do you usually perform your physical activities? *",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color.White,
                         lineHeight = 22.sp
                     )
                     Spacer(modifier = Modifier.height(12.dp))
-
-                    TimeRadioButtonOption("Morning (6 AM - 10 AM)", selectedTime == "Morning") { selectedTime = "Morning" }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    TimeRadioButtonOption("Afternoon (11 AM - 4 PM)", selectedTime == "Afternoon") { selectedTime = "Afternoon" }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    TimeRadioButtonOption("Evening (5 PM - 9 PM)", selectedTime == "Evening") { selectedTime = "Evening" }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    TimeRadioButtonOption("Late Night (10 PM - 12 AM)", selectedTime == "Late Night") { selectedTime = "Late Night" }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    TimeRadioButtonOption("I don't have a fixed time", selectedTime == "No fixed time") { selectedTime = "No fixed time" }
+                    
+                    var expanded by remember { mutableStateOf(false) }
+                    val timeOptions = listOf(
+                        "Morning (6 AM - 10 AM)",
+                        "Afternoon (11 AM - 4 PM)",
+                        "Evening (5 PM - 9 PM)",
+                        "Late Night (10 PM - 12 AM)",
+                        "I don't have a fixed time"
+                    )
+                    
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = selectedTime,
+                            onValueChange = {},
+                            modifier = Modifier.fillMaxWidth(),
+                            readOnly = true,
+                            trailingIcon = {
+                                Icon(
+                                    painter = painterResource(android.R.drawable.arrow_down_float),
+                                    contentDescription = "Dropdown",
+                                    tint = Color.White,
+                                    modifier = Modifier.clickable { expanded = !expanded }
+                                )
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = Color(0x40FFFFFF),
+                                unfocusedContainerColor = Color(0x40FFFFFF),
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedBorderColor = Color.Transparent,
+                                unfocusedBorderColor = Color.Transparent
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        DropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xE6FFFFFF))
+                        ) {
+                            timeOptions.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option, color = Color.Black) },
+                                    onClick = {
+                                        selectedTime = option
+                                        expanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(24.dp))
 
@@ -223,27 +265,21 @@ fun HealthHistory2ScreenContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         // Back Button
-                        IconButton(
+                        TextButton(
                             onClick = onBack,
-                            modifier = Modifier
-                                .size(48.dp)
-                                .background(
-                                    color = Color(0x40FFFFFF),
-                                    shape = CircleShape
-                                )
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = Color.White
+                            )
                         ) {
-                            Icon(
-                                painter = painterResource(android.R.drawable.ic_media_play),
-                                contentDescription = "Back",
-                                tint = Color.White,
-                                modifier = Modifier
-                                    .size(20.dp)
-                                    .graphicsLayer(rotationZ = 180f)
+                            Text(
+                                text = "Back",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium
                             )
                         }
 
                         // Next Button
-                        IconButton(
+                        TextButton(
                             onClick = {
                                 // Validate all fields
                                 if (stepCount.isEmpty() || activityMinutes.isEmpty() || 
@@ -259,18 +295,14 @@ fun HealthHistory2ScreenContent(
                                     onNext()
                                 }
                             },
-                            modifier = Modifier
-                                .size(48.dp)
-                                .background(
-                                    color = Color(0x40FFFFFF),
-                                    shape = CircleShape
-                                )
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = Color.White
+                            )
                         ) {
-                            Icon(
-                                painter = painterResource(android.R.drawable.ic_media_play),
-                                contentDescription = "Next",
-                                tint = Color.White,
-                                modifier = Modifier.size(20.dp)
+                            Text(
+                                text = "Next",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium
                             )
                         }
                     }

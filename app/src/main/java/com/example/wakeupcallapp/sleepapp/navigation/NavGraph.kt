@@ -19,6 +19,7 @@ import com.example.wakeupcallapp.sleepapp.FatigueSleepiness5ScreenContent
 import com.example.wakeupcallapp.sleepapp.InfoConsentScreenContent
 import com.example.wakeupcallapp.sleepapp.SleepHabits1ScreenContent
 import com.example.wakeupcallapp.sleepapp.SleepHabits2ScreenContent
+import com.example.wakeupcallapp.sleepapp.SurveySummaryScreenContent
 import com.example.wakeupcallapp.sleepapp.WakeUpCallScreen
 import com.example.wakeupcallapp.sleepapp.LogInScreenContent
 import com.example.wakeupcallapp.sleepapp.SignUpScreenContent
@@ -54,6 +55,7 @@ object NavRoutes {
     const val SLEEP_HABITS_2 = "sleep_habits_2"
     const val HEALTH_HISTORY_1 = "health_history_1"
     const val HEALTH_HISTORY_2 = "health_history_2"
+    const val SURVEY_SUMMARY = "survey_summary"
 
     // Authenticated main app flow
     const val DASHBOARD = "dashboard"
@@ -255,10 +257,25 @@ fun AppNavGraph(
         composable(NavRoutes.FATIGUE_SLEEPINESS_5) {
             FatigueSleepiness5ScreenContent(
                 onNext = {
-                    // Navigate to dashboard and clear all back stack
+                    // Navigate to survey summary for review before submission
+                    navController.navigate(NavRoutes.SURVEY_SUMMARY)
+                },
+                onBack = { navController.navigateUp() }
+            )
+        }
+        
+        // Survey Summary - Review before submission
+        composable(NavRoutes.SURVEY_SUMMARY) {
+            SurveySummaryScreenContent(
+                onSubmit = {
+                    // Navigate to dashboard after submission
                     navController.navigate(NavRoutes.DASHBOARD) {
                         popUpTo(NavRoutes.SPLASH) { inclusive = true }
                     }
+                },
+                onEdit = { screen ->
+                    // Navigate to specific screen for editing
+                    navController.navigate(screen)
                 },
                 onBack = { navController.navigateUp() }
             )

@@ -99,7 +99,7 @@ fun FatigueSleepiness5ScreenContent(
 
                     // Question
                     Text(
-                        text = "Sitting in a car, stopped for a few minutes due to traffic",
+                        text = "Sitting in a car, stopped for a few minutes due to traffic *",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color.White

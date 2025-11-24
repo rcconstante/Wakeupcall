@@ -903,11 +903,11 @@ fun DashboardScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Retake Questionnaire Button
+            // Review Answers Button
             Button(
                 onClick = { 
-                    // Don't reset - keep existing data and let user modify it
-                    navController.navigate("demographics")
+                    // Navigate to survey summary for review
+                    navController.navigate("survey_summary")
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -916,7 +916,7 @@ fun DashboardScreen(
                 shape = RoundedCornerShape(28.dp)
             ) {
                 Text(
-                    text = "Retake Questionnaire",
+                    text = "Review Answers",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White

@@ -111,7 +111,7 @@ fun SleepHabits1ScreenContent(
 
                     // Sleep hours field
                     Text(
-                        text = "How many hours of sleep do you get?",
+                        text = "How many hours of sleep do you get? *",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color.White,
@@ -129,7 +129,7 @@ fun SleepHabits1ScreenContent(
 
                     // Do you snore question
                     Text(
-                        text = "Do you snore?",
+                        text = "Do you snore? *",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color.White
@@ -147,40 +147,43 @@ fun SleepHabits1ScreenContent(
                         onClick = { doesSnore = "No" }
                     )
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                    // Only show snoring level if user answered Yes to snoring
+                    if (doesSnore == "Yes") {
+                        Spacer(modifier = Modifier.height(24.dp))
 
-                    // Snoring level question
-                    Text(
-                        text = "Your snoring is...",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color.White
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
+                        // Snoring level question
+                        Text(
+                            text = "Your snoring is... *",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
 
-                    SleepRadioButtonOption(
-                        text = "Slightly louder than breathing",
-                        selected = snoringLevel == "Slightly louder",
-                        onClick = { snoringLevel = "Slightly louder" }
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    SleepRadioButtonOption(
-                        text = "As loud as talking",
-                        selected = snoringLevel == "As loud as talking",
-                        onClick = { snoringLevel = "As loud as talking" }
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    SleepRadioButtonOption(
-                        text = "Louder than talking",
-                        selected = snoringLevel == "Louder than talking",
-                        onClick = { snoringLevel = "Louder than talking" }
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    SleepRadioButtonOption(
-                        text = "Very loud, can be heard in adjacent rooms",
-                        selected = snoringLevel == "Very loud",
-                        onClick = { snoringLevel = "Very loud" }
-                    )
+                        SleepRadioButtonOption(
+                            text = "Slightly louder than breathing",
+                            selected = snoringLevel == "Slightly louder",
+                            onClick = { snoringLevel = "Slightly louder" }
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        SleepRadioButtonOption(
+                            text = "As loud as talking",
+                            selected = snoringLevel == "As loud as talking",
+                            onClick = { snoringLevel = "As loud as talking" }
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        SleepRadioButtonOption(
+                            text = "Louder than talking",
+                            selected = snoringLevel == "Louder than talking",
+                            onClick = { snoringLevel = "Louder than talking" }
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        SleepRadioButtonOption(
+                            text = "Very loud, can be heard in adjacent rooms",
+                            selected = snoringLevel == "Very loud",
+                            onClick = { snoringLevel = "Very loud" }
+                        )
+                    }
 
                     Spacer(modifier = Modifier.height(24.dp))
 
@@ -202,29 +205,27 @@ fun SleepHabits1ScreenContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         // Back Button
-                        IconButton(
+                        TextButton(
                             onClick = onBack,
-                            modifier = Modifier
-                                .size(48.dp)
-                                .background(
-                                    color = Color(0x40FFFFFF),
-                                    shape = CircleShape
-                                )
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = Color.White
+                            )
                         ) {
-                            Icon(
-                                painter = painterResource(android.R.drawable.ic_media_play),
-                                contentDescription = "Back",
-                                tint = Color.White,
-                                modifier = Modifier
-                                    .size(20.dp)
-                                    .graphicsLayer(rotationZ = 180f)
+                            Text(
+                                text = "Back",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium
                             )
                         }
 
                         // Next Button
-                        IconButton(
+                        TextButton(
                             onClick = {
-                                if (sleepHours.isEmpty() || doesSnore.isEmpty() || snoringLevel.isEmpty()) {
+                                // Validate: if snoring Yes, must select level; if No, skip level
+                                val isValid = sleepHours.isNotEmpty() && doesSnore.isNotEmpty() &&
+                                    (doesSnore == "No" || snoringLevel.isNotEmpty())
+                                
+                                if (!isValid) {
                                     showError = true
                                 } else {
                                     showError = false
@@ -232,7 +233,7 @@ fun SleepHabits1ScreenContent(
                                     surveyViewModel.updateSleepHabits(
                                         hours = sleepHours.toDoubleOrNull() ?: 7.0,
                                         snores = doesSnore == "Yes",
-                                        snoringLevel = snoringLevel,
+                                        snoringLevel = if (doesSnore == "Yes") snoringLevel else "None",
                                         observedApnea = false
                                     )
                                     // Map to Berlin Category 1
@@ -241,18 +242,14 @@ fun SleepHabits1ScreenContent(
                                     onNext()
                                 }
                             },
-                            modifier = Modifier
-                                .size(48.dp)
-                                .background(
-                                    color = Color(0x40FFFFFF),
-                                    shape = CircleShape
-                                )
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = Color.White
+                            )
                         ) {
-                            Icon(
-                                painter = painterResource(android.R.drawable.ic_media_play),
-                                contentDescription = "Next",
-                                tint = Color.White,
-                                modifier = Modifier.size(20.dp)
+                            Text(
+                                text = "Next",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium
                             )
                         }
                     }

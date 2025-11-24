@@ -103,7 +103,7 @@ fun FatigueSleepiness2ScreenContent(
 
                     // Question 1
                     Text(
-                        text = "Have you ever nodded off or fallen asleep while driving a vehicle?",
+                        text = "Have you ever nodded off or fallen asleep while driving a vehicle? *",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color.White,
@@ -146,7 +146,7 @@ fun FatigueSleepiness2ScreenContent(
 
                     // Question 2
                     Text(
-                        text = "Identify how likely you are to fall asleep during the following daytime activities:",
+                        text = "Identify how likely you are to fall asleep during the following daytime activities: *",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color.White,
@@ -156,7 +156,7 @@ fun FatigueSleepiness2ScreenContent(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
-                        text = "Sitting and reading",
+                        text = "Sitting and reading *",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color.White
@@ -208,27 +208,17 @@ fun FatigueSleepiness2ScreenContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         // Back button
-                        IconButton(
+                        TextButton(
                             onClick = onBack,
-                            modifier = Modifier
-                                .size(48.dp)
-                                .background(
-                                    color = Color(0x40FFFFFF),
-                                    shape = CircleShape
-                                )
-                        ) {
-                            Icon(
-                                painter = painterResource(android.R.drawable.ic_media_play),
-                                contentDescription = "Back",
-                                tint = Color.White,
-                                modifier = Modifier
-                                    .size(20.dp)
-                                    .graphicsLayer(rotationZ = 180f)
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = Color.White
                             )
+                        ) {
+                            Text("Back")
                         }
 
                         // Next button
-                        IconButton(
+                        TextButton(
                             onClick = {
                                 if (noddedOffDriving.isEmpty() || dozingReading.isEmpty()) {
                                     showError = true
@@ -243,19 +233,11 @@ fun FatigueSleepiness2ScreenContent(
                                     onNext()
                                 }
                             },
-                            modifier = Modifier
-                                .size(48.dp)
-                                .background(
-                                    color = Color(0x40FFFFFF),
-                                    shape = CircleShape
-                                )
-                        ) {
-                            Icon(
-                                painter = painterResource(android.R.drawable.ic_media_play),
-                                contentDescription = "Next",
-                                tint = Color.White,
-                                modifier = Modifier.size(20.dp)
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = Color.White
                             )
+                        ) {
+                            Text("Next")
                         }
                     }
                 }

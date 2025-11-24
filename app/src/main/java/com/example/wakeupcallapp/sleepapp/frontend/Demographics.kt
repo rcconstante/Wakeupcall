@@ -131,7 +131,7 @@ fun DemographicsScreenContent(
 
                     // Age field
                     Text(
-                        text = "What is your age?",
+                        text = "What is your age?*",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color.White
@@ -148,7 +148,7 @@ fun DemographicsScreenContent(
 
                     // Sex selection
                     Text(
-                        text = "What is your sex?",
+                        text = "What is your sex?*",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color.White
@@ -171,7 +171,7 @@ fun DemographicsScreenContent(
 
                     // Height field
                     Text(
-                        text = "What is your height (cm)?",
+                        text = "What is your height (cm)?*",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color.White
@@ -188,7 +188,7 @@ fun DemographicsScreenContent(
 
                     // Weight field
                     Text(
-                        text = "What is your weight (kg)?",
+                        text = "What is your weight (kg)?*",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color.White
@@ -215,7 +215,7 @@ fun DemographicsScreenContent(
 
                     // Neck circumference field
                     Text(
-                        text = "What is your neck-circumference (cm)?",
+                        text = "What is your neck-circumference (cm)?*",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color.White
@@ -230,12 +230,25 @@ fun DemographicsScreenContent(
 
                     Spacer(modifier = Modifier.height(32.dp))
 
-                    // Next button inside card (bottom right)
+                    // Navigation buttons
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        IconButton(
+                        TextButton(
+                            onClick = onBack,
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = Color.White
+                            )
+                        ) {
+                            Text(
+                                text = "Back",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        
+                        TextButton(
                             onClick = {
                                 // Log form values BEFORE parsing
                                 android.util.Log.d("Demographics", "=== DEMOGRAPHICS FORM SUBMISSION ===")
@@ -262,18 +275,14 @@ fun DemographicsScreenContent(
                                 android.util.Log.d("Demographics", "✅ Updated ViewModel successfully")
                                 onNext()
                             },
-                            modifier = Modifier
-                                .size(48.dp)
-                                .background(
-                                    color = Color(0x40FFFFFF),
-                                    shape = CircleShape
-                                )
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = Color.White
+                            )
                         ) {
-                            Icon(
-                                painter = painterResource(android.R.drawable.ic_media_play),
-                                contentDescription = "Next",
-                                tint = Color.White,
-                                modifier = Modifier.size(20.dp)
+                            Text(
+                                text = "Next",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium
                             )
                         }
                     }

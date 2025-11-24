@@ -92,7 +92,7 @@ fun FatigueSleepiness4ScreenContent(
 
                     // Question 1
                     Text(
-                        text = "In a car, while stopped for a few minutes in traffic",
+                        text = "In a car, while stopped for a few minutes in traffic *",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color.White
@@ -110,7 +110,7 @@ fun FatigueSleepiness4ScreenContent(
 
                     // Question 2
                     Text(
-                        text = "Reading while sitting quietly",
+                        text = "Reading while sitting quietly *",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color.White
@@ -128,7 +128,7 @@ fun FatigueSleepiness4ScreenContent(
 
                     // Question 3
                     Text(
-                        text = "Sitting quietly after dinner (without alcohol)",
+                        text = "Sitting quietly after dinner (without alcohol) *",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color.White
@@ -162,24 +162,17 @@ fun FatigueSleepiness4ScreenContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         // Back button
-                        IconButton(
+                        TextButton(
                             onClick = onBack,
-                            modifier = Modifier
-                                .size(48.dp)
-                                .background(color = Color(0x40FFFFFF), shape = CircleShape)
-                        ) {
-                            Icon(
-                                painter = painterResource(android.R.drawable.ic_media_play),
-                                contentDescription = "Back",
-                                tint = Color.White,
-                                modifier = Modifier
-                                    .size(20.dp)
-                                    .graphicsLayer(rotationZ = 180f)
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = Color.White
                             )
+                        ) {
+                            Text("Back")
                         }
 
                         // Next button
-                        IconButton(
+                        TextButton(
                             onClick = {
                                 if (carStop.isEmpty() || readingSitting.isEmpty() || afterDinner.isEmpty()) {
                                     showError = true
@@ -192,16 +185,11 @@ fun FatigueSleepiness4ScreenContent(
                                     onNext()
                                 }
                             },
-                            modifier = Modifier
-                                .size(48.dp)
-                                .background(color = Color(0x40FFFFFF), shape = CircleShape)
-                        ) {
-                            Icon(
-                                painter = painterResource(android.R.drawable.ic_media_play),
-                                contentDescription = "Next",
-                                tint = Color.White,
-                                modifier = Modifier.size(20.dp)
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = Color.White
                             )
+                        ) {
+                            Text("Next")
                         }
                     }
                 }

@@ -103,7 +103,7 @@ fun HealthHistory1ScreenContent(
 
                     // Question 1: Hypertension
                     Text(
-                        text = "Have you been diagnosed with high blood pressure (hypertension)?",
+                        text = "Have you been diagnosed with high blood pressure (hypertension)?*",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color.White,
@@ -118,7 +118,7 @@ fun HealthHistory1ScreenContent(
 
                     // Question 2: Diabetes
                     Text(
-                        text = "Have you been diagnosed with Diabetes?",
+                        text = "Have you been diagnosed with Diabetes?*",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color.White,
@@ -133,7 +133,7 @@ fun HealthHistory1ScreenContent(
 
                     // Question 3: Smoking
                     Text(
-                        text = "Do you smoke?",
+                        text = "Do you smoke?*",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color.White,
@@ -148,7 +148,7 @@ fun HealthHistory1ScreenContent(
 
                     // Question 4: Alcohol
                     Text(
-                        text = "Do you drink alcohol?",
+                        text = "Do you drink alcohol?*",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color.White,
@@ -179,27 +179,21 @@ fun HealthHistory1ScreenContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         // Back button
-                        IconButton(
+                        TextButton(
                             onClick = onBack,
-                            modifier = Modifier
-                                .size(48.dp)
-                                .background(
-                                    color = Color(0x40FFFFFF),
-                                    shape = CircleShape
-                                )
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = Color.White
+                            )
                         ) {
-                            Icon(
-                                painter = painterResource(android.R.drawable.ic_media_play),
-                                contentDescription = "Back",
-                                tint = Color.White,
-                                modifier = Modifier
-                                    .size(20.dp)
-                                    .graphicsLayer(rotationZ = 180f)
+                            Text(
+                                text = "Back",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium
                             )
                         }
 
                         // Next button
-                        IconButton(
+                        TextButton(
                             onClick = {
                                 android.util.Log.d("HealthHistory1", "=== HEALTH HISTORY FORM SUBMISSION ===")
                                 android.util.Log.d("HealthHistory1", "Form values: hypertension='$hypertension', diabetes='$diabetes', smoking='$smoking', alcohol='$alcohol'")
@@ -223,18 +217,14 @@ fun HealthHistory1ScreenContent(
                                     onNext()
                                 }
                             },
-                            modifier = Modifier
-                                .size(48.dp)
-                                .background(
-                                    color = Color(0x40FFFFFF),
-                                    shape = CircleShape
-                                )
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = Color.White
+                            )
                         ) {
-                            Icon(
-                                painter = painterResource(android.R.drawable.ic_media_play),
-                                contentDescription = "Next",
-                                tint = Color.White,
-                                modifier = Modifier.size(20.dp)
+                            Text(
+                                text = "Next",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium
                             )
                         }
                     }

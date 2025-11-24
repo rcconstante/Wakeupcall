@@ -603,6 +603,17 @@ class HealthConnectManager(private val context: Context) {
                 Log.w(TAG, "⚠️ ============================================")
             }
             
+            if (averageSleep == 0.0 && sleepWithData.isEmpty()) {
+                Log.w(TAG, "⚠️ ============================================")
+                Log.w(TAG, "⚠️ NO SLEEP DURATION RECORDS FOUND IN HEALTH CONNECT")
+                Log.w(TAG, "⚠️ Possible reasons:")
+                Log.w(TAG, "⚠️ 1. No sleep tracking data available in the last 7 days")
+                Log.w(TAG, "⚠️ 2. No sleep tracking apps are writing to Health Connect")
+                Log.w(TAG, "⚠️ 3. Sleep tracking feature is disabled")
+                Log.w(TAG, "⚠️ Suggestion: Use a sleep tracker app (e.g., Sleep as Android, Google Fit)")
+                Log.w(TAG, "⚠️ ============================================")
+            }
+            
             HealthConnectData(
                 dailySteps = todaySteps,
                 averageDailySteps = averageSteps,

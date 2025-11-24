@@ -94,7 +94,7 @@ fun SleepHabits2ScreenContent(
 
                     // Question 1
                     Text(
-                        text = "How often do you snore?",
+                        text = "How often do you snore?*",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color.White
@@ -120,7 +120,7 @@ fun SleepHabits2ScreenContent(
 
                     // Question 2
                     Text(
-                        text = "Has your snoring ever bothered other people?",
+                        text = "Has your snoring ever bothered other people?*",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color.White,
@@ -141,7 +141,7 @@ fun SleepHabits2ScreenContent(
 
                     // Question 3
                     Text(
-                        text = "Has anyone observed that you quit breathing during your sleep?",
+                        text = "Has anyone observed that you quit breathing during your sleep?*",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color.White,
@@ -186,27 +186,21 @@ fun SleepHabits2ScreenContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         // Back button
-                        IconButton(
+                        TextButton(
                             onClick = onBack,
-                            modifier = Modifier
-                                .size(48.dp)
-                                .background(
-                                    color = Color(0x40FFFFFF),
-                                    shape = CircleShape
-                                )
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = Color.White
+                            )
                         ) {
-                            Icon(
-                                painter = painterResource(android.R.drawable.ic_media_play),
-                                contentDescription = "Back",
-                                tint = Color.White,
-                                modifier = Modifier
-                                    .size(20.dp)
-                                    .graphicsLayer(rotationZ = 180f)
+                            Text(
+                                text = "Back",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium
                             )
                         }
 
                         // Next button
-                        IconButton(
+                        TextButton(
                             onClick = {
                                 if (snoreFrequency.isEmpty() || botheredOthers.isEmpty() || breathingQuit.isEmpty()) {
                                     showError = true
@@ -226,18 +220,14 @@ fun SleepHabits2ScreenContent(
                                     onNext()
                                 }
                             },
-                            modifier = Modifier
-                                .size(48.dp)
-                                .background(
-                                    color = Color(0x40FFFFFF),
-                                    shape = CircleShape
-                                )
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = Color.White
+                            )
                         ) {
-                            Icon(
-                                painter = painterResource(android.R.drawable.ic_media_play),
-                                contentDescription = "Next",
-                                tint = Color.White,
-                                modifier = Modifier.size(20.dp)
+                            Text(
+                                text = "Next",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium
                             )
                         }
                     }
