@@ -56,6 +56,11 @@ object NavRoutes {
     const val HEALTH_HISTORY_1 = "health_history_1"
     const val HEALTH_HISTORY_2 = "health_history_2"
     const val SURVEY_SUMMARY = "survey_summary"
+    
+    // Helper to add edit mode parameter
+    fun withEditMode(route: String, fromSummary: Boolean = false): String {
+        return if (fromSummary) "$route?fromSummary=true" else route
+    }
 
     // Authenticated main app flow
     const val DASHBOARD = "dashboard"
@@ -137,7 +142,16 @@ fun AppNavGraph(
             AuthScreenContent(
                 onLogIn = { navController.navigate(NavRoutes.LOGIN) },
                 onSignUp = { navController.navigate(NavRoutes.SIGNUP) },
-                onGuest = { navController.navigate(NavRoutes.DASHBOARD) }
+                onGuest = { 
+                    // Guest mode - enter guest mode in AuthViewModel and go to Data Consent
+                    val authViewModel = (navController.context as? androidx.activity.ComponentActivity)?.let {
+                        androidx.lifecycle.ViewModelProvider(it)[com.example.wakeupcallapp.sleepapp.viewmodel.AuthViewModel::class.java]
+                    }
+                    authViewModel?.enterGuestMode()
+                    navController.navigate(NavRoutes.DATA_CONSENT) {
+                        popUpTo(NavRoutes.AUTH) { inclusive = true }
+                    }
+                }
             )
         }
 
@@ -191,76 +205,244 @@ fun AppNavGraph(
             )
         }
 
-        composable(NavRoutes.DEMOGRAPHICS) {
+        composable("${NavRoutes.DEMOGRAPHICS}?fromSummary={fromSummary}") { backStackEntry ->
+            val fromSummary = backStackEntry.arguments?.getString("fromSummary") == "true"
             DemographicsScreenContent(
-                onNext = { navController.navigate(NavRoutes.HEALTH_HISTORY_1) },
-                onBack = { navController.navigateUp() }
+                onNext = { 
+                    if (fromSummary) {
+                        navController.navigate(NavRoutes.SURVEY_SUMMARY) {
+                            popUpTo(NavRoutes.SURVEY_SUMMARY) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigate(NavRoutes.HEALTH_HISTORY_1)
+                    }
+                },
+                onBack = { 
+                    if (fromSummary) {
+                        navController.navigate(NavRoutes.SURVEY_SUMMARY) {
+                            popUpTo(NavRoutes.SURVEY_SUMMARY) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigateUp()
+                    }
+                }
             )
         }
 
-        composable(NavRoutes.HEALTH_HISTORY_1) {
+        composable("${NavRoutes.HEALTH_HISTORY_1}?fromSummary={fromSummary}") { backStackEntry ->
+            val fromSummary = backStackEntry.arguments?.getString("fromSummary") == "true"
             HealthHistory1ScreenContent(
-                onNext = { navController.navigate(NavRoutes.HEALTH_HISTORY_2) },
-                onBack = { navController.navigateUp() }
+                onNext = { 
+                    if (fromSummary) {
+                        navController.navigate(NavRoutes.SURVEY_SUMMARY) {
+                            popUpTo(NavRoutes.SURVEY_SUMMARY) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigate(NavRoutes.HEALTH_HISTORY_2)
+                    }
+                },
+                onBack = { 
+                    if (fromSummary) {
+                        navController.navigate(NavRoutes.SURVEY_SUMMARY) {
+                            popUpTo(NavRoutes.SURVEY_SUMMARY) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigateUp()
+                    }
+                }
             )
         }
 
-        composable(NavRoutes.HEALTH_HISTORY_2) {
+        composable("${NavRoutes.HEALTH_HISTORY_2}?fromSummary={fromSummary}") { backStackEntry ->
+            val fromSummary = backStackEntry.arguments?.getString("fromSummary") == "true"
             HealthHistory2ScreenContent(
-                onNext = { navController.navigate(NavRoutes.SLEEP_HABITS_1) },
-                onBack = { navController.navigateUp() }
+                onNext = { 
+                    if (fromSummary) {
+                        navController.navigate(NavRoutes.SURVEY_SUMMARY) {
+                            popUpTo(NavRoutes.SURVEY_SUMMARY) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigate(NavRoutes.SLEEP_HABITS_1)
+                    }
+                },
+                onBack = { 
+                    if (fromSummary) {
+                        navController.navigate(NavRoutes.SURVEY_SUMMARY) {
+                            popUpTo(NavRoutes.SURVEY_SUMMARY) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigateUp()
+                    }
+                }
             )
         }
 
-        composable(NavRoutes.SLEEP_HABITS_1) {
+        composable("${NavRoutes.SLEEP_HABITS_1}?fromSummary={fromSummary}") { backStackEntry ->
+            val fromSummary = backStackEntry.arguments?.getString("fromSummary") == "true"
             SleepHabits1ScreenContent(
-                onNext = { navController.navigate(NavRoutes.SLEEP_HABITS_2) },
-                onBack = { navController.navigateUp() }
+                onNext = { 
+                    if (fromSummary) {
+                        navController.navigate(NavRoutes.SURVEY_SUMMARY) {
+                            popUpTo(NavRoutes.SURVEY_SUMMARY) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigate(NavRoutes.SLEEP_HABITS_2)
+                    }
+                },
+                onBack = { 
+                    if (fromSummary) {
+                        navController.navigate(NavRoutes.SURVEY_SUMMARY) {
+                            popUpTo(NavRoutes.SURVEY_SUMMARY) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigateUp()
+                    }
+                }
             )
         }
 
-        composable(NavRoutes.SLEEP_HABITS_2) {
+        composable("${NavRoutes.SLEEP_HABITS_2}?fromSummary={fromSummary}") { backStackEntry ->
+            val fromSummary = backStackEntry.arguments?.getString("fromSummary") == "true"
             SleepHabits2ScreenContent(
-                onNext = { navController.navigate(NavRoutes.FATIGUE_SLEEPINESS_1) },
-                onBack = { navController.navigateUp() }
+                onNext = { 
+                    if (fromSummary) {
+                        navController.navigate(NavRoutes.SURVEY_SUMMARY) {
+                            popUpTo(NavRoutes.SURVEY_SUMMARY) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigate(NavRoutes.FATIGUE_SLEEPINESS_1)
+                    }
+                },
+                onBack = { 
+                    if (fromSummary) {
+                        navController.navigate(NavRoutes.SURVEY_SUMMARY) {
+                            popUpTo(NavRoutes.SURVEY_SUMMARY) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigateUp()
+                    }
+                }
             )
         }
 
-        composable(NavRoutes.FATIGUE_SLEEPINESS_1) {
+        composable("${NavRoutes.FATIGUE_SLEEPINESS_1}?fromSummary={fromSummary}") { backStackEntry ->
+            val fromSummary = backStackEntry.arguments?.getString("fromSummary") == "true"
             FatigueSleepiness1ScreenContent(
-                onNext = { navController.navigate(NavRoutes.FATIGUE_SLEEPINESS_2) },
-                onBack = { navController.navigateUp() }
+                onNext = { 
+                    if (fromSummary) {
+                        navController.navigate(NavRoutes.SURVEY_SUMMARY) {
+                            popUpTo(NavRoutes.SURVEY_SUMMARY) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigate(NavRoutes.FATIGUE_SLEEPINESS_2)
+                    }
+                },
+                onBack = { 
+                    if (fromSummary) {
+                        navController.navigate(NavRoutes.SURVEY_SUMMARY) {
+                            popUpTo(NavRoutes.SURVEY_SUMMARY) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigateUp()
+                    }
+                }
             )
         }
 
-        composable(NavRoutes.FATIGUE_SLEEPINESS_2) {
+        composable("${NavRoutes.FATIGUE_SLEEPINESS_2}?fromSummary={fromSummary}") { backStackEntry ->
+            val fromSummary = backStackEntry.arguments?.getString("fromSummary") == "true"
             FatigueSleepiness2ScreenContent(
-                onNext = { navController.navigate(NavRoutes.FATIGUE_SLEEPINESS_3) },
-                onBack = { navController.navigateUp() }
+                onNext = { 
+                    if (fromSummary) {
+                        navController.navigate(NavRoutes.SURVEY_SUMMARY) {
+                            popUpTo(NavRoutes.SURVEY_SUMMARY) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigate(NavRoutes.FATIGUE_SLEEPINESS_3)
+                    }
+                },
+                onBack = { 
+                    if (fromSummary) {
+                        navController.navigate(NavRoutes.SURVEY_SUMMARY) {
+                            popUpTo(NavRoutes.SURVEY_SUMMARY) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigateUp()
+                    }
+                }
             )
         }
 
-        composable(NavRoutes.FATIGUE_SLEEPINESS_3) {
+        composable("${NavRoutes.FATIGUE_SLEEPINESS_3}?fromSummary={fromSummary}") { backStackEntry ->
+            val fromSummary = backStackEntry.arguments?.getString("fromSummary") == "true"
             FatigueSleepiness3ScreenContent(
-                onNext = { navController.navigate(NavRoutes.FATIGUE_SLEEPINESS_4) },
-                onBack = { navController.navigateUp() }
+                onNext = { 
+                    if (fromSummary) {
+                        navController.navigate(NavRoutes.SURVEY_SUMMARY) {
+                            popUpTo(NavRoutes.SURVEY_SUMMARY) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigate(NavRoutes.FATIGUE_SLEEPINESS_4)
+                    }
+                },
+                onBack = { 
+                    if (fromSummary) {
+                        navController.navigate(NavRoutes.SURVEY_SUMMARY) {
+                            popUpTo(NavRoutes.SURVEY_SUMMARY) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigateUp()
+                    }
+                }
             )
         }
 
-        composable(NavRoutes.FATIGUE_SLEEPINESS_4) {
+        composable("${NavRoutes.FATIGUE_SLEEPINESS_4}?fromSummary={fromSummary}") { backStackEntry ->
+            val fromSummary = backStackEntry.arguments?.getString("fromSummary") == "true"
             FatigueSleepiness4ScreenContent(
-                onNext = { navController.navigate(NavRoutes.FATIGUE_SLEEPINESS_5) },
-                onBack = { navController.navigateUp() }
+                onNext = { 
+                    if (fromSummary) {
+                        navController.navigate(NavRoutes.SURVEY_SUMMARY) {
+                            popUpTo(NavRoutes.SURVEY_SUMMARY) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigate(NavRoutes.FATIGUE_SLEEPINESS_5)
+                    }
+                },
+                onBack = { 
+                    if (fromSummary) {
+                        navController.navigate(NavRoutes.SURVEY_SUMMARY) {
+                            popUpTo(NavRoutes.SURVEY_SUMMARY) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigateUp()
+                    }
+                }
             )
         }
 
-        composable(NavRoutes.FATIGUE_SLEEPINESS_5) {
+        composable("${NavRoutes.FATIGUE_SLEEPINESS_5}?fromSummary={fromSummary}") { backStackEntry ->
+            val fromSummary = backStackEntry.arguments?.getString("fromSummary") == "true"
             FatigueSleepiness5ScreenContent(
                 onNext = {
-                    // Navigate to survey summary for review before submission
-                    navController.navigate(NavRoutes.SURVEY_SUMMARY)
+                    if (fromSummary) {
+                        navController.navigate(NavRoutes.SURVEY_SUMMARY) {
+                            popUpTo(NavRoutes.SURVEY_SUMMARY) { inclusive = true }
+                        }
+                    } else {
+                        // Navigate to survey summary for review before submission
+                        navController.navigate(NavRoutes.SURVEY_SUMMARY)
+                    }
                 },
-                onBack = { navController.navigateUp() }
+                onBack = { 
+                    if (fromSummary) {
+                        navController.navigate(NavRoutes.SURVEY_SUMMARY) {
+                            popUpTo(NavRoutes.SURVEY_SUMMARY) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigateUp()
+                    }
+                }
             )
         }
         
@@ -274,8 +456,8 @@ fun AppNavGraph(
                     }
                 },
                 onEdit = { screen ->
-                    // Navigate to specific screen for editing
-                    navController.navigate(screen)
+                    // Navigate to specific screen for editing with fromSummary flag
+                    navController.navigate("$screen?fromSummary=true")
                 },
                 onBack = { navController.navigateUp() }
             )

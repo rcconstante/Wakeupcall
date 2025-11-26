@@ -37,6 +37,9 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private val _hasAcceptedInfoConsent = MutableStateFlow(false)
     val hasAcceptedInfoConsent: StateFlow<Boolean> = _hasAcceptedInfoConsent.asStateFlow()
 
+    private val _isGuestMode = MutableStateFlow(false)
+    val isGuestMode: StateFlow<Boolean> = _isGuestMode.asStateFlow()
+
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -249,5 +252,37 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun clearError() {
         _errorMessage.value = null
+    }
+
+    /**
+     * Enter guest mode - creates a temporary guest user with full functionality
+     */
+    fun enterGuestMode() {
+        _isGuestMode.value = true
+        _isAuthenticated.value = true
+        _currentUser.value = User(
+            id = -1,
+            firstName = "Guest",
+            lastName = "",
+            email = "guest@wakeupcall.app"
+        )
+        _hasSurvey.value = false
+        _hasAcceptedInfoConsent.value = true // Guest accepts by continuing
+        
+        // Don't save guest mode to SharedPreferences
+    }
+
+    /**
+     * Exit guest mode and clear all data
+     */
+    fun exitGuestMode() {
+        if (_isGuestMode.value) {
+            _isGuestMode.value = false
+            _isAuthenticated.value = false
+            _currentUser.value = null
+            _authToken.value = null
+            _hasSurvey.value = false
+            _hasAcceptedInfoConsent.value = false
+        }
     }
 }

@@ -47,12 +47,14 @@ fun HealthHistory1ScreenContent(
     // Collect current ViewModel values
     val currentHypertension by surveyViewModel.hypertension.collectAsState()
     val currentDiabetes by surveyViewModel.diabetes.collectAsState()
+    val currentDepression by surveyViewModel.depression.collectAsState()
     val currentSmokes by surveyViewModel.smokes.collectAsState()
     val currentAlcohol by surveyViewModel.alcohol.collectAsState()
     
     // Initialize with current values - remember keys ensure re-initialization when values change
     var hypertension by remember(currentHypertension) { mutableStateOf(if (currentHypertension) "Yes" else "No") }
     var diabetes by remember(currentDiabetes) { mutableStateOf(if (currentDiabetes) "Yes" else "No") }
+    var depression by remember(currentDepression) { mutableStateOf(if (currentDepression) "Yes" else "No") }
     var smoking by remember(currentSmokes) { mutableStateOf(if (currentSmokes) "Yes" else "No") }
     var alcohol by remember(currentAlcohol) { mutableStateOf(if (currentAlcohol) "Yes" else "No") }
     var showError by remember { mutableStateOf(false) }
@@ -131,7 +133,22 @@ fun HealthHistory1ScreenContent(
 
                     Spacer(modifier = Modifier.height(32.dp))
 
-                    // Question 3: Smoking
+                    // Question 3: Depression
+                    Text(
+                        text = "Have you been diagnosed with depression or anxiety?*",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White,
+                        lineHeight = 22.sp
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HealthRadioButtonOption("Yes", depression == "Yes") { depression = "Yes" }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    HealthRadioButtonOption("No", depression == "No") { depression = "No" }
+
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    // Question 4: Smoking
                     Text(
                         text = "Do you smoke?*",
                         fontSize = 16.sp,
@@ -146,7 +163,7 @@ fun HealthHistory1ScreenContent(
 
                     Spacer(modifier = Modifier.height(32.dp))
 
-                    // Question 4: Alcohol
+                    // Question 5: Alcohol
                     Text(
                         text = "Do you drink alcohol?*",
                         fontSize = 16.sp,
@@ -196,11 +213,11 @@ fun HealthHistory1ScreenContent(
                         TextButton(
                             onClick = {
                                 android.util.Log.d("HealthHistory1", "=== HEALTH HISTORY FORM SUBMISSION ===")
-                                android.util.Log.d("HealthHistory1", "Form values: hypertension='$hypertension', diabetes='$diabetes', smoking='$smoking', alcohol='$alcohol'")
-                                android.util.Log.d("HealthHistory1", "Current ViewModel: hypertension=$currentHypertension, diabetes=$currentDiabetes, smokes=$currentSmokes, alcohol=$currentAlcohol")
+                                android.util.Log.d("HealthHistory1", "Form values: hypertension='$hypertension', diabetes='$diabetes', depression='$depression', smoking='$smoking', alcohol='$alcohol'")
+                                android.util.Log.d("HealthHistory1", "Current ViewModel: hypertension=$currentHypertension, diabetes=$currentDiabetes, depression=$currentDepression, smokes=$currentSmokes, alcohol=$currentAlcohol")
                                 
                                 // Validate all fields are answered
-                                if (hypertension.isEmpty() || diabetes.isEmpty() || 
+                                if (hypertension.isEmpty() || diabetes.isEmpty() || depression.isEmpty() ||
                                     smoking.isEmpty() || alcohol.isEmpty()) {
                                     showError = true
                                     android.util.Log.d("HealthHistory1", "❌ Validation failed - empty fields")
@@ -210,6 +227,7 @@ fun HealthHistory1ScreenContent(
                                     surveyViewModel.updateMedicalHistory(
                                         hypertension = hypertension == "Yes",
                                         diabetes = diabetes == "Yes",
+                                        depression = depression == "Yes",
                                         smokes = smoking == "Yes",
                                         alcohol = alcohol == "Yes"
                                     )

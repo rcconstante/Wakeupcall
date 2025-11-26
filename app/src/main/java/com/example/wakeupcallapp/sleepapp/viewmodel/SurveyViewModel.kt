@@ -42,6 +42,9 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
     private val _diabetes = MutableStateFlow(false)
     val diabetes: StateFlow<Boolean> = _diabetes.asStateFlow()
     
+    private val _depression = MutableStateFlow(false)
+    val depression: StateFlow<Boolean> = _depression.asStateFlow()
+    
     private val _smokes = MutableStateFlow(false)
     val smokes: StateFlow<Boolean> = _smokes.asStateFlow()
     
@@ -198,9 +201,10 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
         android.util.Log.d("SurveyViewModel", "🔵 After update: _age=${_age.value}, _height=${_heightCm.value}, _weight=${_weightKg.value}")
     }
     
-    fun updateMedicalHistory(hypertension: Boolean, diabetes: Boolean, smokes: Boolean, alcohol: Boolean) {
+    fun updateMedicalHistory(hypertension: Boolean, diabetes: Boolean, depression: Boolean, smokes: Boolean, alcohol: Boolean) {
         _hypertension.value = hypertension
         _diabetes.value = diabetes
+        _depression.value = depression
         _smokes.value = smokes
         _alcohol.value = alcohol
     }
@@ -266,15 +270,16 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
     
     fun resetSurveyData() {
         // Reset demographics to defaults
-        _age.value = 30
-        _sex.value = "male"
-        _heightCm.value = 170.0
-        _weightKg.value = 70.0
-        _neckCircumferenceCm.value = 37.0
+        _age.value = 0
+        _sex.value = ""
+        _heightCm.value = 0.0
+        _weightKg.value = 0.0
+        _neckCircumferenceCm.value = 0.0
         
         // Reset medical history
         _hypertension.value = false
         _diabetes.value = false
+        _depression.value = false
         _smokes.value = false
         _alcohol.value = false
         
@@ -287,14 +292,14 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
         _berlinCategory3Sleepy.value = false
         
         // Reset sleep habits
-        _sleepHours.value = 7.0
+        _sleepHours.value = 0.0
         _snores.value = false
-        _snoringLevel.value = "None"
+        _snoringLevel.value = ""
         _observedApnea.value = false
         
         // Reset fatigue/sleepiness
-        _tiredDuringDay.value = "No"
-        _tiredAfterSleep.value = "No"
+        _tiredDuringDay.value = ""
+        _tiredAfterSleep.value = ""
         _feelsSleepy.value = false
         _noddedOffDriving.value = ""
         
@@ -306,7 +311,7 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
         _physicalActivityTime.value = ""
         
         // Reset Google Fit data
-        _dailySteps.value = 5000
+        _dailySteps.value = 0
         
         // Clear submission result
         _submissionResult.value = null
@@ -324,7 +329,7 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
                 // Log current ViewModel state before submission
                 android.util.Log.d("SurveyViewModel", "=== SUBMITTING SURVEY DATA ===")
                 android.util.Log.d("SurveyViewModel", "Demographics: age=${_age.value}, sex=${_sex.value}, height=${_heightCm.value}, weight=${_weightKg.value}, neck=${_neckCircumferenceCm.value}")
-                android.util.Log.d("SurveyViewModel", "Medical: hypertension=${_hypertension.value}, diabetes=${_diabetes.value}, smokes=${_smokes.value}, alcohol=${_alcohol.value}")
+                android.util.Log.d("SurveyViewModel", "Medical: hypertension=${_hypertension.value}, diabetes=${_diabetes.value}, depression=${_depression.value}, smokes=${_smokes.value}, alcohol=${_alcohol.value}")
                 android.util.Log.d("SurveyViewModel", "ESS: ${_essResponses.value}")
                 android.util.Log.d("SurveyViewModel", "Sleep: hours=${_sleepHours.value}, snores=${_snores.value}, observedApnea=${_observedApnea.value}")
                 android.util.Log.d("SurveyViewModel", "Daily Steps: ${_dailySteps.value}")
@@ -342,6 +347,7 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
                 val medicalHistory = MedicalHistory(
                     hypertension = _hypertension.value,
                     diabetes = _diabetes.value,
+                    depression = _depression.value,
                     smokes = _smokes.value,
                     alcohol = _alcohol.value
                 )
@@ -460,27 +466,28 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
     }
     
     fun resetSurvey() {
-        _age.value = 30
-        _sex.value = "male"
-        _heightCm.value = 170.0
-        _weightKg.value = 70.0
-        _neckCircumferenceCm.value = 37.0
+        _age.value = 0
+        _sex.value = ""
+        _heightCm.value = 0.0
+        _weightKg.value = 0.0
+        _neckCircumferenceCm.value = 0.0
         _hypertension.value = false
         _diabetes.value = false
+        _depression.value = false
         _smokes.value = false
         _alcohol.value = false
         _essResponses.value = MutableList(8) { 0 }
         _berlinCategory1.value = mutableMapOf()
         _berlinCategory2.value = mutableMapOf()
         _berlinCategory3Sleepy.value = false
-        _sleepHours.value = 7.0
+        _sleepHours.value = 0.0
         _snores.value = false
         _snoringLevel.value = ""
         _observedApnea.value = false
         _tiredDuringDay.value = ""
         _tiredAfterSleep.value = ""
         _feelsSleepy.value = false
-        _dailySteps.value = 5000
+        _dailySteps.value = 0
         _submissionResult.value = null
         _errorMessage.value = null
     }
@@ -531,9 +538,10 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
                     // Populate medical history
                     if (response.medicalHistory != null) {
                         val medical = response.medicalHistory
-                        android.util.Log.d("SurveyViewModel", "🟢 Medical history found: hypertension=${medical.hypertension}, diabetes=${medical.diabetes}, smokes=${medical.smokes}, alcohol=${medical.alcohol}")
+                        android.util.Log.d("SurveyViewModel", "🟢 Medical history found: hypertension=${medical.hypertension}, diabetes=${medical.diabetes}, depression=${medical.depression}, smokes=${medical.smokes}, alcohol=${medical.alcohol}")
                         _hypertension.value = medical.hypertension
                         _diabetes.value = medical.diabetes
+                        _depression.value = medical.depression
                         _smokes.value = medical.smokes
                         _alcohol.value = medical.alcohol
                         android.util.Log.d("SurveyViewModel", "✅ Updated all medical history fields")

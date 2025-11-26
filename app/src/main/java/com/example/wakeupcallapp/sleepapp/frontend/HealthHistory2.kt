@@ -63,8 +63,7 @@ fun HealthHistory2ScreenContent(
         )
     }
     var activityMinutes by remember { mutableStateOf("") }
-    var activityType1 by remember { mutableStateOf("") }
-    var activityType2 by remember { mutableStateOf("") }
+    var selectedActivityType by remember { mutableStateOf("") }
     var selectedTime by remember(healthData, currentPhysicalActivityTime) { 
         mutableStateOf(
             if (currentPhysicalActivityTime.isNotEmpty()) {
@@ -157,27 +156,73 @@ fun HealthHistory2ScreenContent(
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // Types of Physical Activity
+                    // Types of Physical Activity - Dropdown
                     Text(
-                        text = "Types of physical activity:",
+                        text = "Type of physical activity you usually perform: *",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color.White
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    HealthTextField(
-                        value = activityType1,
-                        onValueChange = { activityType1 = it },
-                        placeholder = "",
-                        keyboardType = KeyboardType.Text
+                    
+                    var activityExpanded by remember { mutableStateOf(false) }
+                    val activityTypes = listOf(
+                        "Walking/Jogging",
+                        "Running/Marathon",
+                        "Gym/Weight Training",
+                        "Swimming",
+                        "Cycling",
+                        "Yoga/Pilates",
+                        "Sports (Basketball, Football, etc.)",
+                        "Dance/Aerobics",
+                        "Hiking/Outdoor Activities",
+                        "Home Workouts",
+                        "Sedentary/No Regular Exercise"
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    HealthTextField(
-                        value = activityType2,
-                        onValueChange = { activityType2 = it },
-                        placeholder = "",
-                        keyboardType = KeyboardType.Text
-                    )
+                    
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = selectedActivityType,
+                            onValueChange = {},
+                            modifier = Modifier.fillMaxWidth(),
+                            readOnly = true,
+                            placeholder = { Text("Select activity type", color = Color(0x80FFFFFF)) },
+                            trailingIcon = {
+                                Icon(
+                                    painter = painterResource(android.R.drawable.arrow_down_float),
+                                    contentDescription = "Dropdown",
+                                    tint = Color.White,
+                                    modifier = Modifier.clickable { activityExpanded = !activityExpanded }
+                                )
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = Color(0x40FFFFFF),
+                                unfocusedContainerColor = Color(0x40FFFFFF),
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedBorderColor = Color.Transparent,
+                                unfocusedBorderColor = Color.Transparent
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        DropdownMenu(
+                            expanded = activityExpanded,
+                            onDismissRequest = { activityExpanded = false },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xE6FFFFFF))
+                        ) {
+                            activityTypes.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option, color = Color.Black) },
+                                    onClick = {
+                                        selectedActivityType = option
+                                        activityExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(24.dp))
 
@@ -283,7 +328,7 @@ fun HealthHistory2ScreenContent(
                             onClick = {
                                 // Validate all fields
                                 if (stepCount.isEmpty() || activityMinutes.isEmpty() || 
-                                    activityType1.isEmpty() || selectedTime.isEmpty()) {
+                                    selectedActivityType.isEmpty() || selectedTime.isEmpty()) {
                                     showError = true
                                 } else {
                                     showError = false

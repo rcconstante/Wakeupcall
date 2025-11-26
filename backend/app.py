@@ -76,6 +76,7 @@ def init_db():
             -- Medical history
             hypertension INTEGER,
             diabetes INTEGER,
+            depression INTEGER DEFAULT 0,
             smokes INTEGER,
             alcohol INTEGER,
             -- Survey scores
@@ -334,19 +335,46 @@ def calculate_top_risk_factors(input_features, osa_probability):
     
     return formatted_factors
 
-# Feature list (must match final_lgbm_pipeline.pkl training order)
-# Based on sample input: Age, Sex, BMI, Neck_Circumference, Hypertension, Diabetes,
-# Smokes, Alcohol, Snoring, Sleepiness, Epworth_Score, Berlin_Score, STOPBANG_Total, SleepQuality
+# Feature list (must match WakeUpCall_3Class5Fold_Pipeline.pkl training order)
+# Based on new model with 33 engineered features - 27 input features
+# Includes Age_Group, Depression, and individual STOP/BANG items
 FEATURES = [
-    'Age', 'Sex', 'BMI', 'Neck_Circumference', 'Hypertension', 'Diabetes',
+    'Age', 'Age_Group', 'Sex', 'Height', 'Weight', 'BMI', 'Neck_Circumference',
     'Smokes', 'Alcohol', 'Snoring', 'Sleepiness',
-    'Epworth_Score', 'Berlin_Score', 'STOPBANG_Total'
+    'Epworth_Score', 'Berlin_Score',
+    'Hypertension', 'Diabetes', 'Depression',
+    'STOP_Snore', 'STOP_Tired', 'STOP_ObsApnea', 'STOP_Pressure',
+    'BANG_Age', 'BANG_BMI', 'BANG_Neck', 'BANG_Gender',
+    'STOPBANG'
 ]
 
 # Columns to scale (numerical features) - pipeline handles scaling internally
 NUM_COLS = [
-    'Age', 'BMI', 'Neck_Circumference', 'Epworth_Score', 'STOPBANG_Total'
+    'Age', 'Height', 'Weight', 'BMI', 'Neck_Circumference', 'Epworth_Score', 'STOPBANG'
 ]
+
+
+def calculate_age_group(age):
+    """Calculate age group from age (used for model input)"""
+    if age < 30:
+        return 0
+    elif age < 50:
+        return 1
+    else:
+        return 2
+
+
+def calculate_bang_items(age, bmi, neck_circumference, sex):
+    """
+    Calculate individual BANG items from anthropometric data.
+    Returns dict with BANG_Age, BANG_BMI, BANG_Neck, BANG_Gender
+    """
+    return {
+        'BANG_Age': 1 if age > 50 else 0,
+        'BANG_BMI': 1 if bmi > 35 else 0,
+        'BANG_Neck': 1 if neck_circumference > 40 else 0,
+        'BANG_Gender': 1 if sex == 1 else 0  # 1=Male
+    }
 
 
 # ============ SURVEY CALCULATION UTILITIES ============
@@ -693,7 +721,7 @@ def get_latest_survey():
         
         cursor.execute('''
             SELECT id, age, sex, height_cm, weight_kg, neck_circumference_cm, bmi,
-                   hypertension, diabetes, smokes, alcohol,
+                   hypertension, diabetes, depression, smokes, alcohol,
                    ess_score, berlin_score, stopbang_score, osa_probability, risk_level, completed_at,
                    sleep_duration_hours, daily_steps
             FROM user_surveys
@@ -722,16 +750,17 @@ def get_latest_survey():
         bmi = survey[6]
         hypertension = bool(survey[7])
         diabetes = bool(survey[8])
-        smokes = bool(survey[9])
-        alcohol = bool(survey[10])
-        ess_score = survey[11]
-        berlin_score = survey[12]
-        stopbang_score = survey[13]
-        osa_probability = survey[14]
-        risk_level = survey[15]
-        # completed_at = survey[16]
-        sleep_duration = survey[17] if len(survey) > 17 and survey[17] else 7.0
-        daily_steps = survey[18] if len(survey) > 18 and survey[18] else 5000
+        depression = bool(survey[9])
+        smokes = bool(survey[10])
+        alcohol = bool(survey[11])
+        ess_score = survey[12]
+        berlin_score = survey[13]
+        stopbang_score = survey[14]
+        osa_probability = survey[15]
+        risk_level = survey[16]
+        # completed_at = survey[17]
+        sleep_duration = survey[18] if len(survey) > 18 and survey[18] else 7.0
+        daily_steps = survey[19] if len(survey) > 19 and survey[19] else 5000
         
         # Determine score categories
         if ess_score < 8:
@@ -818,6 +847,7 @@ def get_latest_survey():
                 'medical_history': {
                     'hypertension': hypertension,
                     'diabetes': diabetes,
+                    'depression': depression,
                     'smokes': smokes,
                     'alcohol': alcohol
                 },
@@ -911,6 +941,7 @@ def submit_survey():
         medical = data.get('medical_history', {})
         hypertension = 1 if medical.get('hypertension', False) else 0
         diabetes = 1 if medical.get('diabetes', False) else 0
+        depression = 1 if medical.get('depression', False) else 0
         smokes = 1 if medical.get('smokes', False) else 0
         alcohol = 1 if medical.get('alcohol', False) else 0
         
@@ -1018,21 +1049,43 @@ def submit_survey():
         # Convert Berlin score to binary (0 = low risk, 1 = high risk)
         berlin_score_binary = 1 if berlin_score >= 2 else 0
         
-        # Build feature dictionary for ML model (13 features for WakeUpCall_3Class5Fold_Pipeline.pkl)
+        # Calculate derived features for new 27-feature model
+        age_group = calculate_age_group(age)
+        bang_items = calculate_bang_items(age, bmi, neck_cm, sex)
+        
+        # STOP items from survey responses
+        stop_snore = 1 if snoring else 0
+        stop_tired = 1 if tired else 0
+        stop_obs_apnea = 1 if observed else 0
+        stop_pressure = 1 if pressure else 0
+        
+        # Build feature dictionary for ML model (25 features for new WakeUpCall_3Class5Fold_Pipeline.pkl)
         input_features = {
             'Age': age,
+            'Age_Group': age_group,
             'Sex': sex,  # Already binary: 1=male, 0=female
-            'BMI': bmi,
+            'Height': height_cm,
+            'Weight': weight_kg,
+            'BMI': round(bmi, 1),
             'Neck_Circumference': neck_cm,
-            'Hypertension': hypertension,
-            'Diabetes': diabetes,
             'Smokes': smokes,
             'Alcohol': alcohol,
             'Snoring': snoring_binary,
             'Sleepiness': sleepiness,
             'Epworth_Score': ess_score,
             'Berlin_Score': berlin_score_binary,
-            'STOPBANG_Total': stopbang_score
+            'Hypertension': hypertension,
+            'Diabetes': diabetes,
+            'Depression': depression,
+            'STOP_Snore': stop_snore,
+            'STOP_Tired': stop_tired,
+            'STOP_ObsApnea': stop_obs_apnea,
+            'STOP_Pressure': stop_pressure,
+            'BANG_Age': bang_items['BANG_Age'],
+            'BANG_BMI': bang_items['BANG_BMI'],
+            'BANG_Neck': bang_items['BANG_Neck'],
+            'BANG_Gender': bang_items['BANG_Gender'],
+            'STOPBANG': stopbang_score
         }
         
         # Make prediction if model is loaded
@@ -1047,25 +1100,31 @@ def submit_survey():
                 for feature, value in input_features.items():
                     print(f"  {feature}: {value}")
                 
-                # Create DataFrame (NO SCALING - LightGBM works without it)
+                # Create DataFrame with correct feature order
                 X_input = pd.DataFrame([{f: input_features[f] for f in FEATURES}])
                 print(f"🔍 DEBUG: DataFrame shape: {X_input.shape}")
                 print(f"🔍 DEBUG: DataFrame columns: {list(X_input.columns)}")
                 print(f"🔍 DEBUG: DataFrame values: {X_input.iloc[0].tolist()}")
                 
-                # Get prediction (no scaling needed)
-                y_prob = model.predict_proba(X_input)[:, 1][0]
-                osa_probability = float(y_prob)
-                print(f"🔍 DEBUG: Raw prediction: {y_prob}")
-                print(f"🔍 DEBUG: OSA Probability: {osa_probability}")
+                # Get prediction - 3-class model (Low, Intermediate, High)
+                y_proba = model.predict_proba(X_input)[0]
+                y_pred = model.predict(X_input)[0]
                 
-                # Determine risk level and generate ML-based recommendations
-                if y_prob < 0.3:
-                    risk_level = "Low Risk"
-                elif y_prob < 0.6:
-                    risk_level = "Moderate Risk"
+                # Map prediction to risk level
+                risk_levels = ["Low Risk", "Intermediate Risk", "High Risk"]
+                if isinstance(y_pred, (int, np.integer)):
+                    risk_level = risk_levels[int(y_pred)]
+                    predicted_class_idx = int(y_pred)
                 else:
-                    risk_level = "High Risk"
+                    risk_level = str(y_pred)
+                    predicted_class_idx = list(model.classes_).index(y_pred)
+                
+                # Get high risk probability for backward compatibility
+                osa_probability = float(y_proba[2]) if len(y_proba) > 2 else float(y_proba[predicted_class_idx])
+                certainty = float(y_proba[predicted_class_idx]) * 100
+                
+                print(f"🔍 DEBUG: Class probabilities: Low={y_proba[0]:.3f}, Intermediate={y_proba[1]:.3f}, High={y_proba[2]:.3f}")
+                print(f"🔍 DEBUG: Prediction: {risk_level}, Certainty: {certainty:.2f}%")
                 
                 # Generate personalized recommendation
                 recommendation = generate_ml_recommendation(
@@ -1102,7 +1161,7 @@ def submit_survey():
                 cursor.execute('''
                     UPDATE user_surveys 
                     SET age = ?, sex = ?, height_cm = ?, weight_kg = ?, neck_circumference_cm = ?, bmi = ?,
-                        hypertension = ?, diabetes = ?, smokes = ?, alcohol = ?,
+                        hypertension = ?, diabetes = ?, depression = ?, smokes = ?, alcohol = ?,
                         ess_score = ?, berlin_score = ?, stopbang_score = ?, 
                         osa_probability = ?, risk_level = ?,
                         daily_steps = ?, average_daily_steps = ?, sleep_duration_hours = ?,
@@ -1116,7 +1175,7 @@ def submit_survey():
                         completed_at = CURRENT_TIMESTAMP
                     WHERE user_id = ?
                 ''', (age, demo.get('sex', 'male'), height_cm, weight_kg, neck_cm, bmi,
-                      hypertension, diabetes, smokes, alcohol,
+                      hypertension, diabetes, depression, smokes, alcohol,
                       ess_score, berlin_score_binary, stopbang_score, osa_probability, risk_level,
                       daily_steps, average_daily_steps, sleep_duration, weekly_steps_json, weekly_sleep_json,
                       snoring_level, snoring_frequency, snoring_bothers_others,
@@ -1143,7 +1202,7 @@ def submit_survey():
                 cursor.execute('''
                     INSERT INTO user_surveys 
                     (user_id, age, sex, height_cm, weight_kg, neck_circumference_cm, bmi,
-                     hypertension, diabetes, smokes, alcohol,
+                     hypertension, diabetes, depression, smokes, alcohol,
                      ess_score, berlin_score, stopbang_score, osa_probability, risk_level,
                      daily_steps, average_daily_steps, sleep_duration_hours,
                      weekly_steps_json, weekly_sleep_json,
@@ -1153,10 +1212,10 @@ def submit_survey():
                      ess_sitting_reading, ess_watching_tv, ess_public_sitting,
                      ess_passenger_car, ess_lying_down_afternoon, ess_talking,
                      ess_after_lunch, ess_traffic_stop)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                             ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (user_id, age, demo.get('sex', 'male'), height_cm, weight_kg, neck_cm, bmi,
-                      hypertension, diabetes, smokes, alcohol,
+                      hypertension, diabetes, depression, smokes, alcohol,
                       ess_score, berlin_score_binary, stopbang_score, osa_probability, risk_level,
                       daily_steps, average_daily_steps, sleep_duration, weekly_steps_json, weekly_sleep_json,
                       snoring_level, snoring_frequency, snoring_bothers_others,
@@ -1223,21 +1282,28 @@ def predict_osa_risk():
     """
     Predict OSA risk based on user input
     
-    Expected JSON input:
+    Expected JSON input (new 27-feature model):
     {
-        "Age": 52,
-        "Sex": 1,  # 1=Male, 0=Female
-        "BMI": 36,
-        "Neck_Circumference": 43,
-        "Hypertension": 1,  # 1=Yes, 0=No
+        "Age": 21,
+        "Sex": 0,  # 1=Male, 0=Female
+        "Height": 165,  # in cm
+        "Weight": 55,  # in kg
+        "BMI": 20,  # will be calculated if not provided
+        "Neck_Circumference": 34,
+        "Hypertension": 0,  # 1=Yes, 0=No
         "Diabetes": 0,
+        "Depression": 0,  # 1=Yes, 0=No (new)
         "Smokes": 0,
-        "Alcohol": 1,
-        "Snoring": 1,
-        "Sleepiness": 1,
-        "Epworth_Score": 16,
-        "Berlin_Score": 1,  # 1=High, 0=Low
-        "STOPBANG_Total": 6
+        "Alcohol": 0,
+        "Snoring": 0,  # snoring/loud snoring
+        "Sleepiness": 0,  # excessive daytime sleepiness
+        "Epworth_Score": 4,
+        "Berlin_Score": 0,  # 1=High Risk, 0=Low Risk
+        "STOP_Snore": 0,  # Do you snore loudly?
+        "STOP_Tired": 0,  # Do you often feel tired?
+        "STOP_ObsApnea": 0,  # Has anyone observed you stop breathing?
+        "STOP_Pressure": 0,  # Do you have high blood pressure?
+        "STOPBANG": 3  # Total STOP-BANG score (0-8)
     }
     """
     if model is None:
@@ -1249,6 +1315,53 @@ def predict_osa_risk():
     try:
         # Get JSON data from request
         data = request.get_json()
+        
+        # Calculate derived fields if not provided
+        age = data.get('Age', 30)
+        sex = data.get('Sex', 0)
+        height = data.get('Height', 170)
+        weight = data.get('Weight', 70)
+        neck = data.get('Neck_Circumference', 35)
+        
+        # Calculate BMI if not provided
+        if 'BMI' not in data and height > 0:
+            bmi = weight / ((height / 100) ** 2)
+            data['BMI'] = round(bmi, 1)
+        
+        # Calculate Age_Group if not provided
+        if 'Age_Group' not in data:
+            data['Age_Group'] = calculate_age_group(age)
+        
+        # Add Height/Weight if not present
+        if 'Height' not in data:
+            data['Height'] = height
+        if 'Weight' not in data:
+            data['Weight'] = weight
+        
+        # Calculate BANG items if not provided (derived from age, bmi, neck, sex)
+        bmi = data.get('BMI', 25)
+        bang_items = calculate_bang_items(age, bmi, neck, sex)
+        for key, value in bang_items.items():
+            if key not in data:
+                data[key] = value
+        
+        # Default Depression to 0 if not provided
+        if 'Depression' not in data:
+            data['Depression'] = 0
+        
+        # Handle legacy STOPBANG_Total field (rename to STOPBANG)
+        if 'STOPBANG_Total' in data and 'STOPBANG' not in data:
+            data['STOPBANG'] = data['STOPBANG_Total']
+        
+        # Default STOP items if not provided (derive from related fields)
+        if 'STOP_Snore' not in data:
+            data['STOP_Snore'] = data.get('Snoring', 0)
+        if 'STOP_Tired' not in data:
+            data['STOP_Tired'] = data.get('Sleepiness', 0)
+        if 'STOP_ObsApnea' not in data:
+            data['STOP_ObsApnea'] = 0  # Can't derive, default to 0
+        if 'STOP_Pressure' not in data:
+            data['STOP_Pressure'] = data.get('Hypertension', 0)
         
         # Validate all required features are present
         missing_features = [f for f in FEATURES if f not in data]
@@ -1263,24 +1376,30 @@ def predict_osa_risk():
         
         # Pipeline handles scaling internally - no separate scaling needed
         
-        # Get prediction probability
-        y_prob = model.predict_proba(X_input)[:, 1][0]
-        y_pred = int(y_prob >= 0.5)
+        # Get prediction - 3-class model (Low, Intermediate, High)
+        y_proba = model.predict_proba(X_input)[0]
+        y_pred = model.predict(X_input)[0]
         
-        # Determine risk level
-        if y_prob < 0.3:
-            risk_level = "Low Risk"
-        elif y_prob < 0.6:
-            risk_level = "Moderate Risk"
+        # Map prediction to risk level
+        risk_levels = ["Low Risk", "Intermediate Risk", "High Risk"]
+        if isinstance(y_pred, (int, np.integer)):
+            risk_level = risk_levels[int(y_pred)]
         else:
-            risk_level = "High Risk"
+            risk_level = str(y_pred)
         
-        # Generate comprehensive recommendations (use defaults for non-model features)
+        # Get probability/certainty for the predicted class
+        predicted_class_idx = int(y_pred) if isinstance(y_pred, (int, np.integer)) else list(model.classes_).index(y_pred)
+        certainty = float(y_proba[predicted_class_idx])
+        
+        # Also get probability for high risk (for backwards compatibility)
+        high_risk_prob = float(y_proba[2]) if len(y_proba) > 2 else certainty
+        
+        # Generate comprehensive recommendations
         recommendation = generate_ml_recommendation(
-            y_prob, risk_level, 
+            high_risk_prob, risk_level, 
             data['Age'], data['BMI'], data['Neck_Circumference'],
             data['Hypertension'], data['Diabetes'], data['Smokes'], data['Alcohol'],
-            data['Epworth_Score'], data['Berlin_Score'], data['STOPBANG_Total'],
+            data['Epworth_Score'], data['Berlin_Score'], data.get('STOPBANG', data.get('STOPBANG_Total', 0)),
             data.get('Sleep_Duration', 7.0), data.get('Daily_Steps', 5000)
         )
         
@@ -1288,18 +1407,25 @@ def predict_osa_risk():
         return jsonify({
             'success': True,
             'prediction': {
-                'osa_probability': round(float(y_prob), 3),
-                'osa_class': y_pred,
+                'osa_probability': round(float(high_risk_prob), 3),
+                'certainty': round(certainty * 100, 2),
+                'osa_class': int(predicted_class_idx),
                 'risk_level': risk_level,
+                'class_probabilities': {
+                    'low': round(float(y_proba[0]), 4),
+                    'intermediate': round(float(y_proba[1]), 4) if len(y_proba) > 1 else 0,
+                    'high': round(float(y_proba[2]), 4) if len(y_proba) > 2 else 0
+                },
                 'recommendation': recommendation
             },
             'input_summary': {
                 'age': data['Age'],
+                'age_group': data['Age_Group'],
                 'bmi': data['BMI'],
-                'stopbang_score': data['STOPBANG_Total'],
+                'stopbang_score': data.get('STOPBANG', data.get('STOPBANG_Total', 0)),
                 'epworth_score': data['Epworth_Score'],
-                'sleep_duration': data['Sleep_Duration'],
-                'daily_steps': data['Daily_Steps']
+                'sleep_duration': data.get('Sleep_Duration', 7.0),
+                'daily_steps': data.get('Daily_Steps', 5000)
             },
             'timestamp': datetime.now().isoformat()
         })
@@ -1418,11 +1544,13 @@ def predict_from_google_fit():
         # Optional medical history
         "hypertension": false,
         "diabetes": false,
+        "depression": false,
         "smokes": false,
-        "alcohol": false
+        "alcohol": false,
+        "observed_apnea": false
     }
     """
-    if model is None or scaler is None:
+    if model is None:
         return jsonify({
             'error': 'Model not loaded. Please train the model first.',
             'success': False
@@ -1432,22 +1560,43 @@ def predict_from_google_fit():
         data = request.get_json()
         
         # Calculate BMI
-        height_m = data['height_cm'] / 100
-        bmi = data['weight_kg'] / (height_m ** 2)
+        height = data['height_cm']
+        weight = data['weight_kg']
+        height_m = height / 100
+        bmi = weight / (height_m ** 2)
         
         # Convert sex to binary
         sex = 1 if data['sex'].lower() == 'male' else 0
+        age = data['age']
+        neck = data['neck_circumference_cm']
         
-        # Calculate STOP-Bang components
-        sb_snore = 1 if data.get('snores', False) else 0
-        sb_tired = 1 if data.get('feels_sleepy', False) else 0
-        sb_pressure = 1 if data.get('hypertension', False) else 0
-        sb_bmi = 1 if bmi > 35 else 0
-        sb_age = 1 if data['age'] > 50 else 0
-        sb_neck = 1 if data['neck_circumference_cm'] >= 40 else 0
-        sb_male = sex
+        # Calculate Age Group
+        age_group = calculate_age_group(age)
         
-        stopbang_total = sb_snore + sb_tired + sb_pressure + sb_bmi + sb_age + sb_neck + sb_male
+        # Medical history fields
+        hypertension = 1 if data.get('hypertension', False) else 0
+        diabetes = 1 if data.get('diabetes', False) else 0
+        depression = 1 if data.get('depression', False) else 0
+        smokes = 1 if data.get('smokes', False) else 0
+        alcohol = 1 if data.get('alcohol', False) else 0
+        
+        # Calculate STOP items
+        stop_snore = 1 if data.get('snores', False) else 0
+        stop_tired = 1 if data.get('feels_sleepy', False) else 0
+        stop_obs_apnea = 1 if data.get('observed_apnea', False) else 0
+        stop_pressure = hypertension
+        
+        # Calculate BANG items using helper function
+        bang_items = calculate_bang_items(age, bmi, neck, sex)
+        
+        # Calculate total STOP-BANG score
+        stopbang_total = (stop_snore + stop_tired + stop_obs_apnea + stop_pressure +
+                        bang_items['BANG_Age'] + bang_items['BANG_BMI'] + 
+                        bang_items['BANG_Neck'] + bang_items['BANG_Gender'])
+        
+        # Snoring and Sleepiness flags
+        snoring = stop_snore
+        sleepiness = stop_tired
         
         # Estimate Epworth score (simplified)
         epworth_score = 12 if data.get('feels_sleepy', False) else 6
@@ -1455,69 +1604,86 @@ def predict_from_google_fit():
         # Estimate Berlin score based on snoring and sleepiness
         berlin_score = 1 if (data.get('snores', False) and data.get('feels_sleepy', False)) else 0
         
-        # Estimate sleep quality (inverse of sleepiness)
-        sleep_quality = 5 if data.get('feels_sleepy', False) else 7
-        
-        # Estimate physical activity level from steps
-        steps = data['daily_steps']
-        if steps < 5000:
-            activity_level = 3
-        elif steps < 10000:
-            activity_level = 5
-        else:
-            activity_level = 8
-        
-        # Build feature dictionary
+        # Build feature dictionary for new 27-feature model
         input_features = {
-            'Age': data['age'],
+            'Age': age,
+            'Age_Group': age_group,
             'Sex': sex,
-            'BMI': bmi,
-            'Neck_Circumference': data['neck_circumference_cm'],
-            'Hypertension': 1 if data.get('hypertension', False) else 0,
-            'Diabetes': 1 if data.get('diabetes', False) else 0,
-            'Smokes': 1 if data.get('smokes', False) else 0,
-            'Alcohol': 1 if data.get('alcohol', False) else 0,
-            'Snoring': sb_snore,
-            'Sleepiness': 1 if data.get('feels_sleepy', False) else 0,
+            'Height': height,
+            'Weight': weight,
+            'BMI': round(bmi, 1),
+            'Neck_Circumference': neck,
+            'Smokes': smokes,
+            'Alcohol': alcohol,
+            'Snoring': snoring,
+            'Sleepiness': sleepiness,
             'Epworth_Score': epworth_score,
             'Berlin_Score': berlin_score,
-            'STOPBANG_Total': stopbang_total,
-            'SleepQuality': sleep_quality  # Renamed to match pipeline
+            'Hypertension': hypertension,
+            'Diabetes': diabetes,
+            'Depression': depression,
+            'STOP_Snore': stop_snore,
+            'STOP_Tired': stop_tired,
+            'STOP_ObsApnea': stop_obs_apnea,
+            'STOP_Pressure': stop_pressure,
+            'BANG_Age': bang_items['BANG_Age'],
+            'BANG_BMI': bang_items['BANG_BMI'],
+            'BANG_Neck': bang_items['BANG_Neck'],
+            'BANG_Gender': bang_items['BANG_Gender'],
+            'STOPBANG': stopbang_total
         }
         
-        # Create DataFrame
+        # Create DataFrame with correct feature order
         X_input = pd.DataFrame([{f: input_features[f] for f in FEATURES}])
         
-        # Pipeline handles scaling internally, no need to scale separately
+        # Pipeline handles scaling internally
         
-        # Get prediction
-        y_prob = model.predict_proba(X_input)[:, 1][0]
-        y_pred = int(y_prob >= 0.5)
+        # Get prediction - 3-class model (Low, Intermediate, High)
+        y_proba = model.predict_proba(X_input)[0]
+        y_pred = model.predict(X_input)[0]
         
-        # Determine risk level
-        if y_prob < 0.3:
-            risk_level = "Low Risk"
-            recommendation = "Your OSA risk is low. Continue maintaining healthy sleep habits."
-        elif y_prob < 0.6:
-            risk_level = "Moderate Risk"
-            recommendation = "You have moderate OSA risk. Consider consulting a sleep specialist."
+        # Map prediction to risk level
+        risk_levels = ["Low Risk", "Intermediate Risk", "High Risk"]
+        if isinstance(y_pred, (int, np.integer)):
+            risk_level = risk_levels[int(y_pred)]
         else:
-            risk_level = "High Risk"
+            risk_level = str(y_pred)
+        
+        # Get probability/certainty for the predicted class
+        predicted_class_idx = int(y_pred) if isinstance(y_pred, (int, np.integer)) else list(model.classes_).index(y_pred)
+        certainty = float(y_proba[predicted_class_idx])
+        
+        # Get high risk probability for backwards compatibility
+        high_risk_prob = float(y_proba[2]) if len(y_proba) > 2 else certainty
+        
+        # Generate recommendation based on risk level
+        if risk_level == "Low Risk":
+            recommendation = "Your OSA risk is low. Continue maintaining healthy sleep habits."
+        elif risk_level == "Intermediate Risk":
+            recommendation = "You have intermediate OSA risk. Consider monitoring your sleep patterns and consulting a sleep specialist if symptoms persist."
+        else:
             recommendation = "You have high OSA risk. We strongly recommend consulting a sleep specialist soon."
         
         return jsonify({
             'success': True,
             'prediction': {
-                'osa_probability': round(float(y_prob), 3),
-                'osa_class': y_pred,
+                'osa_probability': round(float(high_risk_prob), 3),
+                'certainty': round(certainty * 100, 2),
+                'osa_class': int(predicted_class_idx),
                 'risk_level': risk_level,
+                'class_probabilities': {
+                    'low': round(float(y_proba[0]), 4),
+                    'intermediate': round(float(y_proba[1]), 4) if len(y_proba) > 1 else 0,
+                    'high': round(float(y_proba[2]), 4) if len(y_proba) > 2 else 0
+                },
                 'recommendation': recommendation
             },
             'calculated_metrics': {
                 'bmi': round(bmi, 1),
+                'age_group': age_group,
                 'stopbang_score': stopbang_total,
                 'estimated_epworth_score': epworth_score,
-                'estimated_activity_level': activity_level
+                'estimated_berlin_score': berlin_score
             },
             'timestamp': datetime.now().isoformat()
         })

@@ -53,6 +53,7 @@ data class Demographics(
 data class MedicalHistory(
     val hypertension: Boolean,
     val diabetes: Boolean,
+    val depression: Boolean = false,
     val smokes: Boolean,
     val alcohol: Boolean
 )
