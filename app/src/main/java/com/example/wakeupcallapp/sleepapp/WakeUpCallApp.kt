@@ -33,17 +33,22 @@ fun WakeUpCallApp() {
             navController = navController,
             isAuthenticated = isAuthenticated,
             onSignOut = {
-                // Clear survey data first
-                surveyViewModel.resetSurvey()
-                surveyViewModel.resetSurveyStateForNewSession()
+                // Clear ALL survey data - reset ViewModel completely
+                android.util.Log.d("WakeUpCallApp", "🔄 Signing out - clearing all survey data")
+                surveyViewModel.resetSurveyData() // Clear all form fields
+                surveyViewModel.resetSurvey() // Clear submission results
+                surveyViewModel.resetSurveyStateForNewSession() // Reset loading states
                 
-                // Then sign out
+                // Then sign out (handles both guest and regular users)
                 authViewModel.signOut()
+                authViewModel.exitGuestMode() // Ensure guest mode is cleared
                 
                 // Navigate back to auth screen and clear entire back stack
                 navController.navigate("auth") {
                     popUpTo(0) { inclusive = true }
                 }
+                
+                android.util.Log.d("WakeUpCallApp", "✅ Sign out complete - all data cleared")
             }
         )
     }

@@ -38,18 +38,28 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
     // ============ MEDICAL HISTORY ============
     private val _hypertension = MutableStateFlow(false)
     val hypertension: StateFlow<Boolean> = _hypertension.asStateFlow()
+    private val _hypertensionAnswered = MutableStateFlow(false)
+    val hypertensionAnswered: StateFlow<Boolean> = _hypertensionAnswered.asStateFlow()
     
     private val _diabetes = MutableStateFlow(false)
     val diabetes: StateFlow<Boolean> = _diabetes.asStateFlow()
+    private val _diabetesAnswered = MutableStateFlow(false)
+    val diabetesAnswered: StateFlow<Boolean> = _diabetesAnswered.asStateFlow()
     
     private val _depression = MutableStateFlow(false)
     val depression: StateFlow<Boolean> = _depression.asStateFlow()
+    private val _depressionAnswered = MutableStateFlow(false)
+    val depressionAnswered: StateFlow<Boolean> = _depressionAnswered.asStateFlow()
     
     private val _smokes = MutableStateFlow(false)
     val smokes: StateFlow<Boolean> = _smokes.asStateFlow()
+    private val _smokesAnswered = MutableStateFlow(false)
+    val smokesAnswered: StateFlow<Boolean> = _smokesAnswered.asStateFlow()
     
     private val _alcohol = MutableStateFlow(false)
     val alcohol: StateFlow<Boolean> = _alcohol.asStateFlow()
+    private val _alcoholAnswered = MutableStateFlow(false)
+    val alcoholAnswered: StateFlow<Boolean> = _alcoholAnswered.asStateFlow()
     
     // ============ ESS (EPWORTH SLEEPINESS SCALE) - 8 questions ============
     // Each response is 0-3: 0=Never, 1=Slight, 2=Moderate, 3=High
@@ -103,6 +113,12 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
     private val _physicalActivityTime = MutableStateFlow("")
     val physicalActivityTime: StateFlow<String> = _physicalActivityTime.asStateFlow()
     
+    private val _physicalActivityMinutes = MutableStateFlow("")
+    val physicalActivityMinutes: StateFlow<String> = _physicalActivityMinutes.asStateFlow()
+    
+    private val _physicalActivityType = MutableStateFlow("")
+    val physicalActivityType: StateFlow<String> = _physicalActivityType.asStateFlow()
+    
     // ============ GOOGLE FIT DATA ============
     private val _dailySteps = MutableStateFlow(0)
     val dailySteps: StateFlow<Int> = _dailySteps.asStateFlow()
@@ -134,9 +150,10 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun prepareForNewSurvey() {
-        android.util.Log.d("SurveyViewModel", "♻️ Preparing for new survey (retake)")
+        android.util.Log.d("SurveyViewModel", "♻️ Preparing for survey edit/retake")
+        android.util.Log.d("SurveyViewModel", "Note: Keeping submissionResult so Dashboard continues showing risk assessment")
         _isSubmitting.value = false
-        _submissionResult.value = null
+        // DO NOT clear _submissionResult - we want to keep showing the risk assessment while editing
         _errorMessage.value = null
     }
     
@@ -203,10 +220,15 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
     
     fun updateMedicalHistory(hypertension: Boolean, diabetes: Boolean, depression: Boolean, smokes: Boolean, alcohol: Boolean) {
         _hypertension.value = hypertension
+        _hypertensionAnswered.value = true
         _diabetes.value = diabetes
+        _diabetesAnswered.value = true
         _depression.value = depression
+        _depressionAnswered.value = true
         _smokes.value = smokes
+        _smokesAnswered.value = true
         _alcohol.value = alcohol
+        _alcoholAnswered.value = true
     }
     
     fun updateESSResponse(index: Int, value: Int) {
@@ -262,6 +284,14 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
         _physicalActivityTime.value = value
     }
     
+    fun updatePhysicalActivityMinutes(value: String) {
+        _physicalActivityMinutes.value = value
+    }
+    
+    fun updatePhysicalActivityType(value: String) {
+        _physicalActivityType.value = value
+    }
+    
     fun updateDailySteps(steps: Int) {
         _dailySteps.value = steps
     }
@@ -278,10 +308,15 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
         
         // Reset medical history
         _hypertension.value = false
+        _hypertensionAnswered.value = false
         _diabetes.value = false
+        _diabetesAnswered.value = false
         _depression.value = false
+        _depressionAnswered.value = false
         _smokes.value = false
+        _smokesAnswered.value = false
         _alcohol.value = false
+        _alcoholAnswered.value = false
         
         // Reset ESS responses
         _essResponses.value = MutableList(8) { 0 }
@@ -309,6 +344,8 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
         
         // Reset physical activity
         _physicalActivityTime.value = ""
+        _physicalActivityMinutes.value = ""
+        _physicalActivityType.value = ""
         
         // Reset Google Fit data
         _dailySteps.value = 0
@@ -416,12 +453,24 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
                 )
                 
                 result.onSuccess { response ->
+                    android.util.Log.d("SurveyViewModel", "✅ Survey submission successful!")
+                    android.util.Log.d("SurveyViewModel", "📊 NEW Prediction - Certainty: ${response.prediction?.osaProbability}, Risk: ${response.prediction?.riskLevel}")
+                    
+                    // Update submission result - this will immediately update Dashboard with NEW values
+                    val oldCertainty = _submissionResult.value?.prediction?.osaProbability
                     _submissionResult.value = response
+                    android.util.Log.d("SurveyViewModel", "🔄 Updated submissionResult: Old certainty=$oldCertainty, New certainty=${response.prediction?.osaProbability}")
+                    
+                    // Mark that data has been loaded so Dashboard knows to display it
+                    _hasLoadedData.value = true
                     
                     // Update SharedPreferences to mark survey as completed
                     val prefs = getApplication<Application>().getSharedPreferences("auth_prefs", Application.MODE_PRIVATE)
                     prefs.edit().putBoolean("has_survey", true).apply()
+                    
+                    android.util.Log.d("SurveyViewModel", "✅ Dashboard will now show updated results")
                 }.onFailure { error ->
+                    android.util.Log.e("SurveyViewModel", "❌ Submission failed: ${error.message}")
                     _errorMessage.value = error.message ?: "Submission failed"
                 }
                 
@@ -494,10 +543,12 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
     
     /**
      * Load existing survey data from backend and populate all fields
+     * @param authToken The authentication token
+     * @param forceRefresh If true, will reload even if data is already loaded
      */
-    fun loadExistingSurvey(authToken: String) {
+    fun loadExistingSurvey(authToken: String, forceRefresh: Boolean = false) {
         android.util.Log.d("SurveyViewModel", "=".repeat(60))
-        android.util.Log.d("SurveyViewModel", "🔵 loadExistingSurvey CALLED with token: ${authToken.take(20)}...")
+        android.util.Log.d("SurveyViewModel", "🔵 loadExistingSurvey CALLED with token: ${authToken.take(20)}..., forceRefresh=$forceRefresh")
         android.util.Log.d("SurveyViewModel", "🔵 Current values BEFORE load: age=${_age.value}, height=${_heightCm.value}, weight=${_weightKg.value}")
         
         viewModelScope.launch {
@@ -540,10 +591,15 @@ class SurveyViewModel(application: Application) : AndroidViewModel(application) 
                         val medical = response.medicalHistory
                         android.util.Log.d("SurveyViewModel", "🟢 Medical history found: hypertension=${medical.hypertension}, diabetes=${medical.diabetes}, depression=${medical.depression}, smokes=${medical.smokes}, alcohol=${medical.alcohol}")
                         _hypertension.value = medical.hypertension
+                        _hypertensionAnswered.value = true
                         _diabetes.value = medical.diabetes
+                        _diabetesAnswered.value = true
                         _depression.value = medical.depression
+                        _depressionAnswered.value = true
                         _smokes.value = medical.smokes
+                        _smokesAnswered.value = true
                         _alcohol.value = medical.alcohol
+                        _alcoholAnswered.value = true
                         android.util.Log.d("SurveyViewModel", "✅ Updated all medical history fields")
                     } else {
                         android.util.Log.e("SurveyViewModel", "❌ Medical history is NULL in response!")

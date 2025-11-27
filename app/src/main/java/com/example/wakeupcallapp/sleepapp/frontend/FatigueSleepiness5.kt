@@ -51,9 +51,10 @@ fun FatigueSleepiness5ScreenContent(
     val essResponses by surveyViewModel.essResponses.collectAsState()
     
     // ESS Q8 (car stopped in traffic) is at index 7
+    // Only show saved value if this specific question was answered (score > 0)
     var carStoppedChoice by remember(essResponses) { 
         mutableStateOf(
-            if (essResponses.any { it > 0 }) ESSMapper.scoreToChoice(essResponses[7]) else ""
+            if (essResponses[7] > 0) ESSMapper.scoreToChoice(essResponses[7]) else ""
         )
     }
     var showError by remember { mutableStateOf(false) }
@@ -190,7 +191,9 @@ fun FatigueSleepiness5ScreenContent(
                         submissionResult?.let { result ->
                             if (result.success) {
                                 LaunchedEffect(result) {
-                                    android.util.Log.d("FatigueSleepiness5", "✅ Survey submitted successfully! Navigating to dashboard...")
+                                    android.util.Log.d("FatigueSleepiness5", "✅ Survey submitted successfully!")
+                                    android.util.Log.d("FatigueSleepiness5", "📊 NEW Prediction - Certainty: ${result.prediction?.osaProbability}, Risk: ${result.prediction?.riskLevel}")
+                                    android.util.Log.d("FatigueSleepiness5", "➡️ Navigating to dashboard with new data...")
                                     kotlinx.coroutines.delay(1000)
                                     onNext()
                                 }

@@ -49,19 +49,20 @@ fun FatigueSleepiness3ScreenContent(
     val essResponses by surveyViewModel.essResponses.collectAsState()
     
     // ESS Q2, Q3, Q4 are at indices 1, 2, 3
+    // Only show saved value if this specific question was answered (score > 0 OR there are other answered questions)
     var watchingTv by remember(essResponses) { 
         mutableStateOf(
-            if (essResponses.any { it > 0 }) ESSMapper.scoreToChoice(essResponses[1]) else ""
+            if (essResponses[1] > 0) ESSMapper.scoreToChoice(essResponses[1]) else ""
         )
     }
     var sittingPublic by remember(essResponses) { 
         mutableStateOf(
-            if (essResponses.any { it > 0 }) ESSMapper.scoreToChoice(essResponses[2]) else ""
+            if (essResponses[2] > 0) ESSMapper.scoreToChoice(essResponses[2]) else ""
         )
     }
     var sittingPassenger by remember(essResponses) { 
         mutableStateOf(
-            if (essResponses.any { it > 0 }) ESSMapper.scoreToChoice(essResponses[3]) else ""
+            if (essResponses[3] > 0) ESSMapper.scoreToChoice(essResponses[3]) else ""
         )
     }
     var showError by remember { mutableStateOf(false) }

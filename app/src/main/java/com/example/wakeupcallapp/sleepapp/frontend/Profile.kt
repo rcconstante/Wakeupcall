@@ -567,17 +567,19 @@ fun SleepBarChart(
     sleepData: Map<String, Double>,
     modifier: Modifier = Modifier
 ) {
-    val maxSleep = 10.0 // Maximum hours for scale
     val sortedData = sleepData.entries.sortedBy { it.key }.takeLast(7)
+    // Dynamically calculate max sleep based on actual data with 20% padding
+    val maxDataValue = sortedData.maxOfOrNull { it.value } ?: 10.0
+    val maxSleep = kotlin.math.max(10.0, maxDataValue * 1.2) // At least 10 hours scale, or 120% of max data
     
     Canvas(modifier = modifier) {
         val barWidth = size.width / (sortedData.size * 2)
         val spacing = barWidth
         
         sortedData.forEachIndexed { index, entry ->
-            val barHeight = (entry.value / maxSleep * size.height).toFloat()
-            val x = index * (barWidth + spacing) + spacing / 2
-            val y = size.height - barHeight
+            val barHeight = ((entry.value / maxSleep * size.height * 0.9f).toFloat()).coerceAtMost(size.height * 0.9f)
+            val x = (index * (barWidth + spacing) + spacing / 2).toFloat()
+            val y = (size.height - barHeight).toFloat()
             
             // Draw bar
             drawRoundRect(
@@ -614,17 +616,19 @@ fun StepsBarChart(
     stepsData: Map<String, Int>,
     modifier: Modifier = Modifier
 ) {
-    val maxSteps = 15000 // Maximum steps for scale
     val sortedData = stepsData.entries.sortedBy { it.key }.takeLast(7)
+    // Dynamically calculate max steps based on actual data with 20% padding
+    val maxDataValue = sortedData.maxOfOrNull { it.value } ?: 10000
+    val maxSteps = kotlin.math.max(10000, (maxDataValue * 1.2).toInt()) // At least 10k scale, or 120% of max data
     
     Canvas(modifier = modifier) {
         val barWidth = size.width / (sortedData.size * 2)
         val spacing = barWidth
         
         sortedData.forEachIndexed { index, entry ->
-            val barHeight = (entry.value.toFloat() / maxSteps * size.height).coerceAtMost(size.height)
-            val x = index * (barWidth + spacing) + spacing / 2
-            val y = size.height - barHeight
+            val barHeight = ((entry.value.toFloat() / maxSteps * size.height * 0.9f).coerceAtMost(size.height * 0.9f))
+            val x = (index * (barWidth + spacing) + spacing / 2).toFloat()
+            val y = (size.height - barHeight).toFloat()
             
             // Draw bar
             drawRoundRect(

@@ -51,6 +51,8 @@ fun HealthHistory2ScreenContent(
     val healthData by healthConnectViewModel.healthData.collectAsState()
     val currentDailySteps by surveyViewModel.dailySteps.collectAsState()
     val currentPhysicalActivityTime by surveyViewModel.physicalActivityTime.collectAsState()
+    val currentPhysicalActivityMinutes by surveyViewModel.physicalActivityMinutes.collectAsState()
+    val currentPhysicalActivityType by surveyViewModel.physicalActivityType.collectAsState()
     
     // Initialize with Health Connect data or default, then allow user override
     var stepCount by remember(healthData, currentDailySteps) { 
@@ -62,8 +64,12 @@ fun HealthHistory2ScreenContent(
             }
         )
     }
-    var activityMinutes by remember { mutableStateOf("") }
-    var selectedActivityType by remember { mutableStateOf("") }
+    var activityMinutes by remember(currentPhysicalActivityMinutes) { 
+        mutableStateOf(currentPhysicalActivityMinutes.ifEmpty { "" }) 
+    }
+    var selectedActivityType by remember(currentPhysicalActivityType) { 
+        mutableStateOf(currentPhysicalActivityType.ifEmpty { "" }) 
+    }
     var selectedTime by remember(healthData, currentPhysicalActivityTime) { 
         mutableStateOf(
             if (currentPhysicalActivityTime.isNotEmpty()) {
@@ -337,6 +343,12 @@ fun HealthHistory2ScreenContent(
                                     surveyViewModel.updateDailySteps(steps)
                                     // Save physical activity time
                                     surveyViewModel.updatePhysicalActivityTime(selectedTime)
+                                    // Save physical activity minutes
+                                    surveyViewModel.updatePhysicalActivityMinutes(activityMinutes)
+                                    // Save physical activity type
+                                    surveyViewModel.updatePhysicalActivityType(selectedActivityType)
+                                    
+                                    android.util.Log.d("HealthHistory2", "Saved: steps=$steps, time=$selectedTime, minutes=$activityMinutes, type=$selectedActivityType")
                                     onNext()
                                 }
                             },

@@ -55,10 +55,22 @@ fun SleepHabits2ScreenContent(
         mutableStateOf(currentSnoringFrequency.ifEmpty { "" }) 
     }
     var botheredOthers by remember(currentSnoringBothersOthers) { 
-        mutableStateOf(if (currentSnoringBothersOthers) "Yes" else "") 
+        mutableStateOf(
+            when {
+                currentSnoringBothersOthers -> "Yes"
+                currentSnoringFrequency.isNotEmpty() -> "No"
+                else -> ""
+            }
+        ) 
     }
     var breathingQuit by remember(currentObservedApnea) { 
-        mutableStateOf(if (currentObservedApnea) "Nearly every day" else "") 
+        mutableStateOf(
+            when {
+                currentObservedApnea -> "Nearly every day"
+                currentSnoringFrequency.isNotEmpty() -> "Never or nearly never"
+                else -> ""
+            }
+        ) 
     }
     var showError by remember { mutableStateOf(false) }
     val dailySteps by surveyViewModel.dailySteps.collectAsState()

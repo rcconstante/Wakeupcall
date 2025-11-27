@@ -63,11 +63,13 @@ fun DemographicsScreenContent(
     val currentNeck by surveyViewModel.neckCircumferenceCm.collectAsState()
     
     // Initialize form fields with current values, but allow user input to override
-    var age by remember(currentAge) { mutableStateOf(currentAge.toString()) }
-    var selectedSex by remember(currentSex) { mutableStateOf(if (currentSex == "male") "Male" else "Female") }
-    var height by remember(currentHeight) { mutableStateOf(currentHeight.toString()) }
-    var weight by remember(currentWeight) { mutableStateOf(currentWeight.toString()) }
-    var neckCircumference by remember(currentNeck) { mutableStateOf(currentNeck.toString()) }
+    var age by remember(currentAge) { mutableStateOf(if (currentAge > 0) currentAge.toString() else "") }
+    var selectedSex by remember(currentSex) { mutableStateOf(if (currentSex.isNotEmpty()) { if (currentSex == "male") "Male" else "Female" } else "") }
+    var height by remember(currentHeight) { mutableStateOf(if (currentHeight > 0) currentHeight.toString() else "") }
+    var weight by remember(currentWeight) { mutableStateOf(if (currentWeight > 0) currentWeight.toString() else "") }
+    var neckCircumference by remember(currentNeck) { mutableStateOf(if (currentNeck > 0) currentNeck.toString() else "") }
+    var showError by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf("") }
 
     // Calculate BMI
     val bmi = remember(height, weight) {
@@ -228,7 +230,18 @@ fun DemographicsScreenContent(
                         keyboardType = KeyboardType.Number
                     )
 
-                    Spacer(modifier = Modifier.height(32.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // Error message
+                    if (showError) {
+                        Text(
+                            text = errorMessage,
+                            fontSize = 14.sp,
+                            color = Color(0xFFFF6B6B),
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
 
                     // Navigation buttons
                     Row(
@@ -254,26 +267,57 @@ fun DemographicsScreenContent(
                                 android.util.Log.d("Demographics", "=== DEMOGRAPHICS FORM SUBMISSION ===")
                                 android.util.Log.d("Demographics", "Raw form values: age='$age', sex='$selectedSex', height='$height', weight='$weight', neck='$neckCircumference'")
                                 
-                                // Parse values - NO DEFAULTS, use what's in the form
-                                val ageInt = age.toIntOrNull() ?: currentAge
-                                val heightDouble = height.toDoubleOrNull() ?: currentHeight
-                                val weightDouble = weight.toDoubleOrNull() ?: currentWeight
-                                val neckDouble = neckCircumference.toDoubleOrNull() ?: currentNeck
-                                val sexString = if (selectedSex == "Male") "male" else "female"
+                                // Validate all required fields
+                                val ageInt = age.toIntOrNull()
+                                val heightDouble = height.toDoubleOrNull()
+                                val weightDouble = weight.toDoubleOrNull()
+                                val neckDouble = neckCircumference.toDoubleOrNull()
                                 
-                                android.util.Log.d("Demographics", "Parsed values: age=$ageInt, sex=$sexString, height=$heightDouble, weight=$weightDouble, neck=$neckDouble")
-                                android.util.Log.d("Demographics", "Current ViewModel before update: age=${currentAge}, sex=${currentSex}, height=${currentHeight}, weight=${currentWeight}, neck=${currentNeck}")
-                                
-                                surveyViewModel.updateDemographics(
-                                    age = ageInt,
-                                    sex = sexString,
-                                    heightCm = heightDouble,
-                                    weightKg = weightDouble,
-                                    neckCm = neckDouble
-                                )
-                                
-                                android.util.Log.d("Demographics", "✅ Updated ViewModel successfully")
-                                onNext()
+                                when {
+                                    ageInt == null || ageInt <= 0 -> {
+                                        showError = true
+                                        errorMessage = "Please enter a valid age"
+                                        android.util.Log.d("Demographics", "❌ Validation failed - invalid age")
+                                    }
+                                    selectedSex.isEmpty() -> {
+                                        showError = true
+                                        errorMessage = "Please select your sex"
+                                        android.util.Log.d("Demographics", "❌ Validation failed - no sex selected")
+                                    }
+                                    heightDouble == null || heightDouble <= 0 -> {
+                                        showError = true
+                                        errorMessage = "Please enter a valid height"
+                                        android.util.Log.d("Demographics", "❌ Validation failed - invalid height")
+                                    }
+                                    weightDouble == null || weightDouble <= 0 -> {
+                                        showError = true
+                                        errorMessage = "Please enter a valid weight"
+                                        android.util.Log.d("Demographics", "❌ Validation failed - invalid weight")
+                                    }
+                                    neckDouble == null || neckDouble <= 0 -> {
+                                        showError = true
+                                        errorMessage = "Please enter a valid neck circumference"
+                                        android.util.Log.d("Demographics", "❌ Validation failed - invalid neck circumference")
+                                    }
+                                    else -> {
+                                        showError = false
+                                        val sexString = if (selectedSex == "Male") "male" else "female"
+                                        
+                                        android.util.Log.d("Demographics", "Parsed values: age=$ageInt, sex=$sexString, height=$heightDouble, weight=$weightDouble, neck=$neckDouble")
+                                        android.util.Log.d("Demographics", "Current ViewModel before update: age=${currentAge}, sex=${currentSex}, height=${currentHeight}, weight=${currentWeight}, neck=${currentNeck}")
+                                        
+                                        surveyViewModel.updateDemographics(
+                                            age = ageInt,
+                                            sex = sexString,
+                                            heightCm = heightDouble,
+                                            weightKg = weightDouble,
+                                            neckCm = neckDouble
+                                        )
+                                        
+                                        android.util.Log.d("Demographics", "✅ Updated ViewModel successfully")
+                                        onNext()
+                                    }
+                                }
                             },
                             colors = ButtonDefaults.textButtonColors(
                                 contentColor = Color.White

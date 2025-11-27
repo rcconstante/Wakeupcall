@@ -142,7 +142,7 @@ fun RecommendationsScreen(
                             // Determine icon based on title/content
                             val icon = when {
                                 title.contains("HIGH RISK", ignoreCase = true) || title.contains("High Risk", ignoreCase = true) -> "🚨"
-                                title.contains("MODERATE RISK", ignoreCase = true) || title.contains("Moderate Risk", ignoreCase = true) -> "⚠️"
+                                title.contains("INTERMEDIATE RISK", ignoreCase = true) || title.contains("Intermediate Risk", ignoreCase = true) || title.contains("MODERATE RISK", ignoreCase = true) || title.contains("Moderate Risk", ignoreCase = true) -> "⚠️"
                                 title.contains("LOW RISK", ignoreCase = true) || title.contains("Low Risk", ignoreCase = true) -> "✅"
                                 title.contains("Weight", ignoreCase = true) || title.contains("BMI", ignoreCase = true) -> "🎯"
                                 title.contains("Alcohol", ignoreCase = true) -> "🍷"

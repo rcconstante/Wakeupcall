@@ -36,10 +36,15 @@ class SurveySummary : ComponentActivity() {
 @Composable
 fun SurveySummaryScreenContent(
     surveyViewModel: SurveyViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity),
+    authViewModel: com.example.wakeupcallapp.sleepapp.viewmodel.AuthViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity),
+    healthConnectViewModel: com.example.wakeupcallapp.sleepapp.viewmodel.HealthConnectViewModel = viewModel(viewModelStoreOwner = LocalContext.current as ComponentActivity),
     onSubmit: () -> Unit = {},
     onEdit: (String) -> Unit = {},
     onBack: () -> Unit = {}
 ) {
+    // Get auth token for submission
+    val token by authViewModel.authToken.collectAsState()
+    
     // Collect all survey data
     val age by surveyViewModel.age.collectAsState()
     val sex by surveyViewModel.sex.collectAsState()
@@ -159,7 +164,20 @@ fun SurveySummaryScreenContent(
                         }
 
                         Button(
-                            onClick = onSubmit,
+                            onClick = {
+                                android.util.Log.d("SurveySummary", "🚀 Submit Survey button clicked!")
+                                
+                                // Submit survey to backend first
+                                token?.let { authToken ->
+                                    android.util.Log.d("SurveySummary", "📤 Calling surveyViewModel.submitSurvey() with token")
+                                    surveyViewModel.submitSurvey(authToken, healthConnectViewModel)
+                                } ?: run {
+                                    android.util.Log.e("SurveySummary", "❌ No auth token available!")
+                                }
+                                
+                                // Then navigate via callback
+                                onSubmit()
+                            },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = Color(0xFF6B8DD6),
                                 contentColor = Color.White

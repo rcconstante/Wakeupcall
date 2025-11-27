@@ -287,10 +287,10 @@ class PDFReportGenerator {
             val prediction = surveyResult.prediction
             if (prediction != null) {
                 // Risk Level Box
-                val riskColor = when (prediction.riskLevel) {
-                    "Low Risk" -> PRIMARY_COLOR
-                    "Moderate Risk" -> WARNING_COLOR
-                    "High Risk" -> DANGER_COLOR
+                val riskColor = when {
+                    prediction.riskLevel.contains("High", ignoreCase = true) -> DANGER_COLOR  // Red
+                    prediction.riskLevel.contains("Intermediate", ignoreCase = true) -> WARNING_COLOR  // Orange
+                    prediction.riskLevel.contains("Low", ignoreCase = true) -> GRAY_COLOR  // Gray
                     else -> GRAY_COLOR
                 }
                 

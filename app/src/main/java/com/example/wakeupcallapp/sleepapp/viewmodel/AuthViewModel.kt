@@ -285,6 +285,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             _authToken.value = null
             _hasSurvey.value = false
             _hasAcceptedInfoConsent.value = false
+            
+            android.util.Log.d("AuthViewModel", "✅ Guest mode exited - all data cleared")
         }
     }
 }

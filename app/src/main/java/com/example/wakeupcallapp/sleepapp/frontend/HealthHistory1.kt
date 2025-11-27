@@ -51,12 +51,29 @@ fun HealthHistory1ScreenContent(
     val currentSmokes by surveyViewModel.smokes.collectAsState()
     val currentAlcohol by surveyViewModel.alcohol.collectAsState()
     
-    // Initialize with current values - remember keys ensure re-initialization when values change
-    var hypertension by remember(currentHypertension) { mutableStateOf(if (currentHypertension) "Yes" else "No") }
-    var diabetes by remember(currentDiabetes) { mutableStateOf(if (currentDiabetes) "Yes" else "No") }
-    var depression by remember(currentDepression) { mutableStateOf(if (currentDepression) "Yes" else "No") }
-    var smoking by remember(currentSmokes) { mutableStateOf(if (currentSmokes) "Yes" else "No") }
-    var alcohol by remember(currentAlcohol) { mutableStateOf(if (currentAlcohol) "Yes" else "No") }
+    // Track if values have been set (to distinguish between "not answered" and "answered No")
+    val hypertensionAnswered by surveyViewModel.hypertensionAnswered.collectAsState()
+    val diabetesAnswered by surveyViewModel.diabetesAnswered.collectAsState()
+    val depressionAnswered by surveyViewModel.depressionAnswered.collectAsState()
+    val smokesAnswered by surveyViewModel.smokesAnswered.collectAsState()
+    val alcoholAnswered by surveyViewModel.alcoholAnswered.collectAsState()
+    
+    // Initialize with saved values from ViewModel (restore when user navigates back)
+    var hypertension by remember(currentHypertension, hypertensionAnswered) { 
+        mutableStateOf(if (hypertensionAnswered) { if (currentHypertension) "Yes" else "No" } else "") 
+    }
+    var diabetes by remember(currentDiabetes, diabetesAnswered) { 
+        mutableStateOf(if (diabetesAnswered) { if (currentDiabetes) "Yes" else "No" } else "") 
+    }
+    var depression by remember(currentDepression, depressionAnswered) { 
+        mutableStateOf(if (depressionAnswered) { if (currentDepression) "Yes" else "No" } else "") 
+    }
+    var smoking by remember(currentSmokes, smokesAnswered) { 
+        mutableStateOf(if (smokesAnswered) { if (currentSmokes) "Yes" else "No" } else "") 
+    }
+    var alcohol by remember(currentAlcohol, alcoholAnswered) { 
+        mutableStateOf(if (alcoholAnswered) { if (currentAlcohol) "Yes" else "No" } else "") 
+    }
     var showError by remember { mutableStateOf(false) }
 
     Box(

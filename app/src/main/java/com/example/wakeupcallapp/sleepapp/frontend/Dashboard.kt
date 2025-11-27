@@ -104,7 +104,7 @@ fun DashboardStepsChart(
     stepsData: Map<String, Int>,
     modifier: Modifier = Modifier
 ) {
-    val maxSteps = 15000
+    val maxSteps = 15000  // Scale max - bars will cap at this value visually
     val sortedData = stepsData.entries.sortedBy { it.key }.takeLast(7)
     
     Canvas(modifier = modifier) {
@@ -114,24 +114,35 @@ fun DashboardStepsChart(
         val spacing = barWidth
         
         sortedData.forEachIndexed { index, entry ->
-            val barHeight = (entry.value.toFloat() / maxSteps * size.height).coerceAtMost(size.height)
+            // Clamp steps to maxSteps for bar height calculation, then ensure within canvas bounds
+            val clampedSteps = entry.value.coerceIn(0, maxSteps)
+            val barHeight = (clampedSteps.toFloat() / maxSteps * size.height)
+                .coerceIn(0f, size.height * 0.95f)  // Leave 5% margin at top
             val x = index * (barWidth + spacing) + spacing / 2
             val y = size.height - barHeight
             
+            // Use different color if value exceeds max scale
+            val barColor = if (entry.value > maxSteps) Color(0xFF81C784) else Color(0xFF4CAF50)
+            
             drawRoundRect(
-                color = Color(0xFF4CAF50),
+                color = barColor,
                 topLeft = Offset(x, y),
-                size = Size(barWidth, barHeight),
+                size = Size(barWidth, barHeight.coerceAtLeast(4f)),  // Min height for visibility
                 cornerRadius = CornerRadius(8f, 8f)
             )
             
-            val text = if (entry.value >= 1000) "${entry.value / 1000}k" else "${entry.value}"
+            // Show actual value with "+" indicator if over max
+            val text = when {
+                entry.value >= 1000 -> "${entry.value / 1000}k${if (entry.value > maxSteps) "+" else ""}"
+                else -> "${entry.value}"
+            }
             val valuePaint = android.graphics.Paint().apply {
                 color = android.graphics.Color.WHITE
                 textSize = 20f
                 textAlign = android.graphics.Paint.Align.CENTER
             }
-            drawContext.canvas.nativeCanvas.drawText(text, x + barWidth / 2, y - 8f, valuePaint)
+            val textY = (y - 8f).coerceAtLeast(25f)  // Ensure text stays within canvas
+            drawContext.canvas.nativeCanvas.drawText(text, x + barWidth / 2, textY, valuePaint)
             
             val dayLabel = entry.key.substring(8, 10)
             val labelPaint = android.graphics.Paint().apply {
@@ -153,7 +164,7 @@ fun DashboardSleepChart(
     sleepData: Map<String, Double>,
     modifier: Modifier = Modifier
 ) {
-    val maxSleep = 10.0
+    val maxSleep = 12.0  // Scale max - bars will cap at this value visually
     val sortedData = sleepData.entries.sortedBy { it.key }.takeLast(7)
     
     Canvas(modifier = modifier) {
@@ -163,24 +174,36 @@ fun DashboardSleepChart(
         val spacing = barWidth
         
         sortedData.forEachIndexed { index, entry ->
-            val barHeight = (entry.value / maxSleep * size.height).toFloat()
+            // Clamp sleep hours to maxSleep for bar height calculation, then ensure within canvas bounds
+            val clampedSleep = entry.value.coerceIn(0.0, maxSleep)
+            val barHeight = (clampedSleep / maxSleep * size.height).toFloat()
+                .coerceIn(0f, size.height * 0.95f)  // Leave 5% margin at top
             val x = index * (barWidth + spacing) + spacing / 2
             val y = size.height - barHeight
             
+            // Use different color if value exceeds max scale
+            val barColor = if (entry.value > maxSleep) Color(0xFF90CAF9) else Color(0xFF6B8DD6)
+            
             drawRoundRect(
-                color = Color(0xFF6B8DD6),
+                color = barColor,
                 topLeft = Offset(x, y),
-                size = Size(barWidth, barHeight),
+                size = Size(barWidth, barHeight.coerceAtLeast(4f)),  // Min height for visibility
                 cornerRadius = CornerRadius(8f, 8f)
             )
             
-            val text = String.format("%.1fh", entry.value)
+            // Show actual value with "+" indicator if over max
+            val text = if (entry.value > maxSleep) {
+                String.format("%.1fh+", entry.value)
+            } else {
+                String.format("%.1fh", entry.value)
+            }
             val valuePaint = android.graphics.Paint().apply {
                 color = android.graphics.Color.WHITE
                 textSize = 20f
                 textAlign = android.graphics.Paint.Align.CENTER
             }
-            drawContext.canvas.nativeCanvas.drawText(text, x + barWidth / 2, y - 8f, valuePaint)
+            val textY = (y - 8f).coerceAtLeast(25f)  // Ensure text stays within canvas
+            drawContext.canvas.nativeCanvas.drawText(text, x + barWidth / 2, textY, valuePaint)
             
             val dayLabel = entry.key.substring(8, 10)
             val labelPaint = android.graphics.Paint().apply {
@@ -393,6 +416,14 @@ fun DashboardScreen(
     
     val hasLoadedData by surveyViewModel.hasLoadedData.collectAsState()
     
+    // Function to refresh data
+    val refreshData = {
+        authToken?.let { token ->
+            android.util.Log.d("Dashboard", "🔄 Manual refresh triggered")
+            surveyViewModel.loadExistingSurvey(token, forceRefresh = true)
+        }
+    }
+    
     // Permission launcher for Health Connect
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = healthConnectViewModel.getPermissionContract()
@@ -401,8 +432,12 @@ fun DashboardScreen(
     }
     
     // Load survey data and Health Connect data when an auth token becomes available
-    LaunchedEffect(authToken, hasLoadedData, currentUser) {
-        android.util.Log.d("Dashboard", "🎯 Dashboard LaunchedEffect - token=${authToken?.take(20)}, hasLoaded=$hasLoadedData")
+    LaunchedEffect(authToken, hasLoadedData, currentUser, submissionResult) {
+        android.util.Log.d("Dashboard", "🎯 Dashboard LaunchedEffect triggered")
+        android.util.Log.d("Dashboard", "   - token=${authToken?.take(20)}")
+        android.util.Log.d("Dashboard", "   - hasLoaded=$hasLoadedData")
+        android.util.Log.d("Dashboard", "   - hasSubmissionResult=${submissionResult != null}")
+        android.util.Log.d("Dashboard", "   - prediction=${submissionResult?.prediction}")
         val token = authToken ?: return@LaunchedEffect
         
         // Set userId for Health Connect
@@ -432,10 +467,7 @@ fun DashboardScreen(
             state = swipeRefreshState,
             onRefresh = {
                 android.util.Log.d("Dashboard", "🔄 Swipe refresh triggered!")
-                authToken?.let { token ->
-                    android.util.Log.d("Dashboard", "🔄 Reloading survey data...")
-                    surveyViewModel.loadExistingSurvey(token)
-                }
+                refreshData()
                 healthConnectViewModel.fetchHealthData()
             }
         ) {
@@ -572,15 +604,26 @@ fun DashboardScreen(
 
                     if (submissionResult != null && submissionResult?.success == true) {
                         val prediction = submissionResult?.prediction
+                        // Backend now sends the predicted class probability (certainty) in osaProbability field
                         val probability = prediction?.osaProbability ?: 0.0
                         val riskLevel = prediction?.riskLevel ?: "Unknown"
+                        
+                        // Display certainty - probability is already the confidence score (0.0 to 1.0)
                         val certainty = String.format("%.0f%%", probability * 100)
                         
+                        // Debug logging
+                        android.util.Log.d("Dashboard", "=== PREDICTION DATA ===")
+                        android.util.Log.d("Dashboard", "Success: ${submissionResult?.success}")
+                        android.util.Log.d("Dashboard", "Certainty Probability: $probability")
+                        android.util.Log.d("Dashboard", "Risk Level: $riskLevel")
+                        android.util.Log.d("Dashboard", "Display Certainty: $certainty")
+                        android.util.Log.d("Dashboard", "Full Prediction: $prediction")
+                        
                         val riskColor = when {
-                            riskLevel.contains("High", ignoreCase = true) -> Color(0xFFE53935)
-                            riskLevel.contains("Low", ignoreCase = true) -> Color(0xFF1E88E5)
-                            riskLevel.contains("Moderate", ignoreCase = true) -> Color(0xFFFB8C00)
-                            else -> Color(0xFF757575)
+                            riskLevel.contains("High", ignoreCase = true) -> Color(0xFFE53935)  // Red
+                            riskLevel.contains("Intermediate", ignoreCase = true) -> Color(0xFFFB8C00)  // Orange
+                            riskLevel.contains("Low", ignoreCase = true) -> Color(0xFF9E9E9E)  // Gray
+                            else -> Color(0xFF757575)  // Default Gray
                         }
                         
                         Row(
@@ -604,16 +647,20 @@ fun DashboardScreen(
 
                             Box(
                                 modifier = Modifier
-                                    .size(130.dp)
+                                    .size(140.dp)
                                     .clip(CircleShape)
-                                    .background(riskColor.copy(alpha = 0.3f)),
+                                    .background(riskColor.copy(alpha = 0.3f))
+                                    .padding(8.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
                                     text = riskLevel,
-                                    fontSize = 28.sp,
+                                    fontSize = 20.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = riskColor
+                                    color = riskColor,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    lineHeight = 24.sp,
+                                    maxLines = 2
                                 )
                             }
                         }
@@ -906,7 +953,11 @@ fun DashboardScreen(
             // Review Answers Button
             Button(
                 onClick = { 
-                    // Navigate to survey summary for review
+                    android.util.Log.d("Dashboard", "🔍 Reviewing/Editing Survey Answers")
+                    android.util.Log.d("Dashboard", "Current data: age=${surveyViewModel.age.value}, height=${surveyViewModel.heightCm.value}")
+                    android.util.Log.d("Dashboard", "Current submission result will be preserved for display")
+                    // Navigate to survey summary for review/edit
+                    // DO NOT clear submissionResult - we want to keep showing risk assessment while editing
                     navController.navigate("survey_summary")
                 },
                 modifier = Modifier

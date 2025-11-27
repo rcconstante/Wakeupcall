@@ -450,7 +450,8 @@ fun AppNavGraph(
         composable(NavRoutes.SURVEY_SUMMARY) {
             SurveySummaryScreenContent(
                 onSubmit = {
-                    // Navigate to dashboard after submission
+                    android.util.Log.d("NavGraph", "🚀 SUBMIT SURVEY button clicked from Survey Summary!")
+                    // Navigate to dashboard - submitSurvey will be called inside SurveySummaryScreenContent
                     navController.navigate(NavRoutes.DASHBOARD) {
                         popUpTo(NavRoutes.SPLASH) { inclusive = true }
                     }
