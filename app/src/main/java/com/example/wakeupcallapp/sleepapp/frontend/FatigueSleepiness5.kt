@@ -47,7 +47,15 @@ fun FatigueSleepiness5ScreenContent(
     onNext: () -> Unit = {},
     onBack: () -> Unit = {}
 ) {
-    var carStoppedChoice by remember { mutableStateOf("") }
+    // Get saved ESS values from ViewModel to persist when navigating back
+    val essResponses by surveyViewModel.essResponses.collectAsState()
+    
+    // ESS Q8 (car stopped in traffic) is at index 7
+    var carStoppedChoice by remember(essResponses) { 
+        mutableStateOf(
+            if (essResponses.any { it > 0 }) ESSMapper.scoreToChoice(essResponses[7]) else ""
+        )
+    }
     var showError by remember { mutableStateOf(false) }
     var hasSubmittedFromThisScreen by remember { mutableStateOf(false) }
     
@@ -190,46 +198,68 @@ fun FatigueSleepiness5ScreenContent(
                         }
                     }
 
-                    // Submit Button
-                    Button(
-                        onClick = {
-                            if (carStoppedChoice.isEmpty()) {
-                                showError = true
-                            } else {
-                                showError = false
-                                android.util.Log.d("FatigueSleepiness5", "🚀 Submit button clicked!")
-                                android.util.Log.d("FatigueSleepiness5", "🚀 Answer: $carStoppedChoice = ${ESSMapper.mapESSDozing(carStoppedChoice)}")
-                                
-                                // Save ESS Q8 (final question)
-                                surveyViewModel.updateESSResponse(7, ESSMapper.mapESSDozing(carStoppedChoice))
-                                
-                                // Submit survey
-                                authToken?.let { token ->
-                                    android.util.Log.d("FatigueSleepiness5", "🚀 Submitting survey with token: ${token.take(20)}...")
-                                    hasSubmittedFromThisScreen = true
-                                    surveyViewModel.submitSurvey(token, healthConnectViewModel)
-                                } ?: android.util.Log.e("FatigueSleepiness5", "❌ No auth token available!")
-                            }
-                        },
-                        enabled = !isSubmitting,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0x40FFFFFF)),
-                        shape = RoundedCornerShape(28.dp)
+                    // Navigation buttons row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (isSubmitting) {
-                            CircularProgressIndicator(
-                                color = Color.White,
-                                modifier = Modifier.size(24.dp)
+                        // Back Button
+                        TextButton(
+                            onClick = onBack,
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = Color.White
                             )
-                        } else {
+                        ) {
                             Text(
-                                text = "Submit",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White
+                                text = "Back",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium
                             )
+                        }
+
+                        // Submit Button
+                        Button(
+                            onClick = {
+                                if (carStoppedChoice.isEmpty()) {
+                                    showError = true
+                                } else {
+                                    showError = false
+                                    android.util.Log.d("FatigueSleepiness5", "🚀 Submit button clicked!")
+                                    android.util.Log.d("FatigueSleepiness5", "🚀 Answer: $carStoppedChoice = ${ESSMapper.mapESSDozing(carStoppedChoice)}")
+                                    
+                                    // Save ESS Q8 (final question)
+                                    surveyViewModel.updateESSResponse(7, ESSMapper.mapESSDozing(carStoppedChoice))
+                                    
+                                    // Submit survey
+                                    authToken?.let { token ->
+                                        android.util.Log.d("FatigueSleepiness5", "🚀 Submitting survey with token: ${token.take(20)}...")
+                                        hasSubmittedFromThisScreen = true
+                                        surveyViewModel.submitSurvey(token, healthConnectViewModel)
+                                    } ?: android.util.Log.e("FatigueSleepiness5", "❌ No auth token available!")
+                                }
+                            },
+                            enabled = !isSubmitting,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 16.dp)
+                                .height(56.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0x40FFFFFF)),
+                            shape = RoundedCornerShape(28.dp)
+                        ) {
+                            if (isSubmitting) {
+                                CircularProgressIndicator(
+                                    color = Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            } else {
+                                Text(
+                                    text = "Submit",
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White
+                                )
+                            }
                         }
                     }
                 }

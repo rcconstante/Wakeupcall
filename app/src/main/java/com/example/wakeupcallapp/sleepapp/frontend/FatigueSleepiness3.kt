@@ -45,9 +45,25 @@ fun FatigueSleepiness3ScreenContent(
     onNext: () -> Unit = {},
     onBack: () -> Unit = {}
 ) {
-    var watchingTv by remember { mutableStateOf("") }
-    var sittingPublic by remember { mutableStateOf("") }
-    var sittingPassenger by remember { mutableStateOf("") }
+    // Get saved ESS values from ViewModel to persist when navigating back
+    val essResponses by surveyViewModel.essResponses.collectAsState()
+    
+    // ESS Q2, Q3, Q4 are at indices 1, 2, 3
+    var watchingTv by remember(essResponses) { 
+        mutableStateOf(
+            if (essResponses.any { it > 0 }) ESSMapper.scoreToChoice(essResponses[1]) else ""
+        )
+    }
+    var sittingPublic by remember(essResponses) { 
+        mutableStateOf(
+            if (essResponses.any { it > 0 }) ESSMapper.scoreToChoice(essResponses[2]) else ""
+        )
+    }
+    var sittingPassenger by remember(essResponses) { 
+        mutableStateOf(
+            if (essResponses.any { it > 0 }) ESSMapper.scoreToChoice(essResponses[3]) else ""
+        )
+    }
     var showError by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {

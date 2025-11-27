@@ -266,6 +266,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             lastName = "",
             email = "guest@wakeupcall.app"
         )
+        // Generate a guest token that allows limited backend functionality
+        _authToken.value = "guest_token_${System.currentTimeMillis()}"
         _hasSurvey.value = false
         _hasAcceptedInfoConsent.value = true // Guest accepts by continuing
         

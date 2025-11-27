@@ -50,8 +50,11 @@ fun SleepHabits1ScreenContent(
     // Get Health Connect data
     val healthData by healthConnectViewModel.healthData.collectAsState()
     val currentSleepHours by surveyViewModel.sleepHours.collectAsState()
+    val currentSnores by surveyViewModel.snores.collectAsState()
+    val currentSnoringLevel by surveyViewModel.snoringLevel.collectAsState()
     
     // Initialize with Health Connect data if available, otherwise use ViewModel value
+    // This persists state when user navigates back
     var sleepHours by remember(currentSleepHours, healthData) { 
         mutableStateOf(
             if (healthData != null && healthData!!.sleepDurationHours > 0) {
@@ -63,8 +66,28 @@ fun SleepHabits1ScreenContent(
             }
         )
     }
-    var doesSnore by remember { mutableStateOf("") }
-    var snoringLevel by remember { mutableStateOf("") }
+    // Persist snoring answer from ViewModel
+    var doesSnore by remember(currentSnores) { 
+        mutableStateOf(
+            when {
+                currentSnores -> "Yes"
+                currentSnoringLevel == "None" || currentSnoringLevel.isEmpty() -> ""
+                else -> "No"
+            }
+        )
+    }
+    // Persist snoring level from ViewModel
+    var snoringLevel by remember(currentSnoringLevel) { 
+        mutableStateOf(
+            when (currentSnoringLevel) {
+                "Slightly louder" -> "Slightly louder"
+                "As loud as talking" -> "As loud as talking"
+                "Louder than talking" -> "Louder than talking"
+                "Very loud" -> "Very loud"
+                else -> ""
+            }
+        )
+    }
     var showError by remember { mutableStateOf(false) }
 
     Box(

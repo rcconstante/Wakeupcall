@@ -45,9 +45,25 @@ fun FatigueSleepiness4ScreenContent(
     onNext: () -> Unit = {},
     onBack: () -> Unit = {}
 ) {
-    var carStop by remember { mutableStateOf("") }
-    var readingSitting by remember { mutableStateOf("") }
-    var afterDinner by remember { mutableStateOf("") }
+    // Get saved ESS values from ViewModel to persist when navigating back
+    val essResponses by surveyViewModel.essResponses.collectAsState()
+    
+    // ESS Q5, Q6, Q7 are at indices 4, 5, 6
+    var carStop by remember(essResponses) { 
+        mutableStateOf(
+            if (essResponses.any { it > 0 }) ESSMapper.scoreToChoice(essResponses[4]) else ""
+        )
+    }
+    var readingSitting by remember(essResponses) { 
+        mutableStateOf(
+            if (essResponses.any { it > 0 }) ESSMapper.scoreToChoice(essResponses[5]) else ""
+        )
+    }
+    var afterDinner by remember(essResponses) { 
+        mutableStateOf(
+            if (essResponses.any { it > 0 }) ESSMapper.scoreToChoice(essResponses[6]) else ""
+        )
+    }
     var showError by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {

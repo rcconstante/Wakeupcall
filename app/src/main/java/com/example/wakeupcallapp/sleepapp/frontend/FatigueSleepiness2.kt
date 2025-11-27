@@ -53,8 +53,22 @@ fun FatigueSleepiness2ScreenContent(
     onNext: () -> Unit = {},
     onBack: () -> Unit = {}
 ) {
-    var noddedOffDriving by remember { mutableStateOf("") }
-    var dozingReading by remember { mutableStateOf("") }
+    // Get saved values from ViewModel to persist when navigating back
+    val currentNoddedOffDriving by surveyViewModel.noddedOffDriving.collectAsState()
+    val essResponses by surveyViewModel.essResponses.collectAsState()
+    
+    // Initialize local state from ViewModel values
+    var noddedOffDriving by remember(currentNoddedOffDriving) { 
+        mutableStateOf(currentNoddedOffDriving.ifEmpty { "" }) 
+    }
+    // ESS Q1 (sitting and reading) is at index 0
+    var dozingReading by remember(essResponses) { 
+        mutableStateOf(
+            if (essResponses[0] > 0 || essResponses.any { it > 0 }) {
+                ESSMapper.scoreToChoice(essResponses[0])
+            } else ""
+        )
+    }
     var showError by remember { mutableStateOf(false) }
 
     Box(

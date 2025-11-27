@@ -105,7 +105,7 @@ def init_db():
 init_db()
 
 def require_auth(f):
-    """Decorator to require authentication token"""
+    """Decorator to require authentication token (supports guest mode)"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         token = request.headers.get('Authorization')
@@ -116,6 +116,18 @@ def require_auth(f):
         # Remove 'Bearer ' prefix if present
         if token.startswith('Bearer '):
             token = token[7:]
+        
+        # Handle guest mode tokens
+        if token.startswith('guest_token_'):
+            # Guest user - create temporary user context
+            request.current_user = {
+                'id': -1,  # Guest user ID
+                'email': 'guest@wakeupcall.app',
+                'first_name': 'Guest',
+                'last_name': 'User',
+                'is_guest': True
+            }
+            return f(*args, **kwargs)
         
         conn = get_db()
         cursor = conn.cursor()
@@ -137,7 +149,8 @@ def require_auth(f):
             'id': user[0],
             'email': user[1],
             'first_name': user[2],
-            'last_name': user[3]
+            'last_name': user[3],
+            'is_guest': False
         }
         
         return f(*args, **kwargs)
@@ -149,14 +162,14 @@ def require_auth(f):
 model = None
 scaler = None
 
-# Model paths - prioritize final_lgbm_pipeline.pkl
+# Model paths - prioritize lightgbm_sleep_apnea_model.pkl
 MODEL_PATHS = [
-    os.path.join(os.path.dirname(__file__), 'WakeUpCall_3Class5Fold_Pipeline.pkl'),  # backend folder - TRY FIRST
-    os.path.join(os.path.dirname(__file__), '..', 'model', 'WakeUpCall_3Class5Fold_Pipeline.pkl'),  # model folder
-    os.path.join(os.path.dirname(__file__), 'final_lgbm_pipeline.pkl'),  # fallback (works, but has 14 features)
+    os.path.join(os.path.dirname(__file__), 'lightgbm_sleep_apnea_model.pkl'),  # PRIMARY MODEL - LightGBM Sleep Apnea Model
+    os.path.join(os.path.dirname(__file__), '..', 'model', 'lightgbm_sleep_apnea_model.pkl'),  # model folder
+    os.path.join(os.path.dirname(__file__), 'WakeUpCall_3Class5Fold_Pipeline.pkl'),  # fallback
+    os.path.join(os.path.dirname(__file__), '..', 'model', 'WakeUpCall_3Class5Fold_Pipeline.pkl'),  # fallback
+    os.path.join(os.path.dirname(__file__), 'final_lgbm_pipeline.pkl'),  # fallback
     os.path.join(os.path.dirname(__file__), '..', 'model', 'final_lgbm_pipeline.pkl'),  # fallback
-    os.path.join(os.path.dirname(__file__), 'lgbm_model.pkl'),  # fallback
-    os.path.join(os.path.dirname(__file__), '..', 'model', 'lgbm_model.pkl'),  # fallback
 ]
 
 SCALER_PATHS = [
@@ -714,6 +727,16 @@ def get_latest_survey():
     Returns the most recent survey submission from the database in the same format as submit
     """
     try:
+        # Check if this is a guest user
+        is_guest = request.current_user.get('is_guest', False)
+        if is_guest:
+            return jsonify({
+                'success': False,
+                'message': 'Guest users do not have saved survey data',
+                'data': None,
+                'is_guest': True
+            }), 404
+        
         user_id = request.current_user['id']
         
         conn = get_db()
@@ -1139,6 +1162,44 @@ def submit_survey():
         # Calculate top risk factors based on actual survey data
         top_factors = calculate_top_risk_factors(input_features, osa_probability)
         print(f"🎯 Top risk factors: {len(top_factors)} factors calculated")
+        
+        # Check if this is a guest user
+        is_guest = request.current_user.get('is_guest', False)
+        
+        if is_guest:
+            # Guest mode - don't save to database, just return results
+            print(f"👤 Guest mode - returning results without database save")
+            return jsonify({
+                'success': True,
+                'message': 'Survey processed successfully (Guest Mode)',
+                'survey_id': -1,  # No real survey ID for guests
+                'scores': {
+                    'ess': {
+                        'score': ess_score,
+                        'category': ess_category
+                    },
+                    'berlin': {
+                        'score': berlin_score,
+                        'category': berlin_category
+                    },
+                    'stopbang': {
+                        'score': stopbang_score,
+                        'category': stopbang_category
+                    }
+                },
+                'prediction': {
+                    'osa_probability': round(osa_probability, 3),
+                    'risk_level': risk_level,
+                    'recommendation': recommendation
+                },
+                'top_risk_factors': top_factors,
+                'calculated_metrics': {
+                    'bmi': round(bmi, 1),
+                    'estimated_activity_level': activity_level,
+                    'estimated_sleep_quality': sleep_quality
+                },
+                'is_guest': True
+            }), 201
         
         # Save to database with all demographics and medical history
         # Check if user already has a survey - if yes, UPDATE instead of INSERT
@@ -1714,6 +1775,15 @@ def generate_pdf_report():
         matplotlib.use('Agg')
         import matplotlib.pyplot as plt
         from datetime import datetime
+        
+        # Check if this is a guest user
+        is_guest = request.current_user.get('is_guest', False)
+        if is_guest:
+            return jsonify({
+                'error': 'PDF generation is not available for guest users. Please create an account to save and export your results.',
+                'success': False,
+                'is_guest': True
+            }), 403
         
         user_id = request.current_user['id']
         user_name = f"{request.current_user['first_name']} {request.current_user['last_name']}"

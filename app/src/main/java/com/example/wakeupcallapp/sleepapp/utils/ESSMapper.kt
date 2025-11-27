@@ -19,4 +19,21 @@ object ESSMapper {
             else -> 0
         }
     }
+    
+    /**
+     * Reverse maps ESS score (0-3) to choice text
+     * Used for restoring saved choices when navigating back
+     * 
+     * @param score ESS score from 0-3
+     * @return The text choice corresponding to the score
+     */
+    fun scoreToChoice(score: Int): String {
+        return when(score) {
+            0 -> "No chance of dozing"
+            1 -> "Slight chance of dozing"
+            2 -> "Moderate chance of dozing"
+            3 -> "High chance of dozing"
+            else -> ""
+        }
+    }
 }

@@ -44,9 +44,22 @@ fun SleepHabits2ScreenContent(
     onNext: () -> Unit = {},
     onBack: () -> Unit = {}
 ) {
-    var snoreFrequency by remember { mutableStateOf("") }
-    var botheredOthers by remember { mutableStateOf("") }
-    var breathingQuit by remember { mutableStateOf("") }
+    // Get snoring state from ViewModel to conditionally show/hide snoring questions
+    val snores by surveyViewModel.snores.collectAsState()
+    val currentSnoringFrequency by surveyViewModel.snoringFrequency.collectAsState()
+    val currentSnoringBothersOthers by surveyViewModel.snoringBothersOthers.collectAsState()
+    val currentObservedApnea by surveyViewModel.observedApnea.collectAsState()
+    
+    // Initialize local state from ViewModel values (persist when going back)
+    var snoreFrequency by remember(currentSnoringFrequency) { 
+        mutableStateOf(currentSnoringFrequency.ifEmpty { "" }) 
+    }
+    var botheredOthers by remember(currentSnoringBothersOthers) { 
+        mutableStateOf(if (currentSnoringBothersOthers) "Yes" else "") 
+    }
+    var breathingQuit by remember(currentObservedApnea) { 
+        mutableStateOf(if (currentObservedApnea) "Nearly every day" else "") 
+    }
     var showError by remember { mutableStateOf(false) }
     val dailySteps by surveyViewModel.dailySteps.collectAsState()
 
@@ -92,52 +105,55 @@ fun SleepHabits2ScreenContent(
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // Question 1
-                    Text(
-                        text = "How often do you snore?*",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color.White
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    listOf(
-                        "Nearly every day",
-                        "3–4 times a week",
-                        "1–2 times a week",
-                        "1–2 times a month",
-                        "Never or nearly never"
-                    ).forEach { option ->
-                        Snore2RadioButtonOption(
-                            text = option,
-                            selected = snoreFrequency == option,
-                            onClick = { snoreFrequency = option }
+                    // Only show snoring-related questions if user said "Yes" to snoring
+                    if (snores) {
+                        // Question 1 - Snoring frequency
+                        Text(
+                            text = "How often do you snore?*",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
+                        Spacer(modifier = Modifier.height(12.dp))
 
-                    Spacer(modifier = Modifier.height(28.dp))
+                        listOf(
+                            "Nearly every day",
+                            "3–4 times a week",
+                            "1–2 times a week",
+                            "1–2 times a month",
+                            "Never or nearly never"
+                        ).forEach { option ->
+                            Snore2RadioButtonOption(
+                                text = option,
+                                selected = snoreFrequency == option,
+                                onClick = { snoreFrequency = option }
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
 
-                    // Question 2
-                    Text(
-                        text = "Has your snoring ever bothered other people?*",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color.White,
-                        lineHeight = 22.sp
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(28.dp))
 
-                    listOf("Yes", "No").forEach { option ->
-                        Snore2RadioButtonOption(
-                            text = option,
-                            selected = botheredOthers == option,
-                            onClick = { botheredOthers = option }
+                        // Question 2 - Snoring bothers others
+                        Text(
+                            text = "Has your snoring ever bothered other people?*",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White,
+                            lineHeight = 22.sp
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
+                        Spacer(modifier = Modifier.height(12.dp))
 
-                    Spacer(modifier = Modifier.height(28.dp))
+                        listOf("Yes", "No").forEach { option ->
+                            Snore2RadioButtonOption(
+                                text = option,
+                                selected = botheredOthers == option,
+                                onClick = { botheredOthers = option }
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+
+                        Spacer(modifier = Modifier.height(28.dp))
+                    }
 
                     // Question 3
                     Text(
@@ -202,11 +218,30 @@ fun SleepHabits2ScreenContent(
                         // Next button
                         TextButton(
                             onClick = {
-                                if (snoreFrequency.isEmpty() || botheredOthers.isEmpty() || breathingQuit.isEmpty()) {
+                                // If user doesn't snore, only validate breathing quit question
+                                // If user snores, validate all questions
+                                val isValid = if (snores) {
+                                    snoreFrequency.isNotEmpty() && botheredOthers.isNotEmpty() && breathingQuit.isNotEmpty()
+                                } else {
+                                    breathingQuit.isNotEmpty()
+                                }
+                                
+                                if (!isValid) {
                                     showError = true
                                 } else {
                                     showError = false
-                                    surveyViewModel.updateBerlinCategory1("item4", botheredOthers == "Yes")
+                                    
+                                    // Only update snoring-related fields if user snores
+                                    if (snores) {
+                                        surveyViewModel.updateBerlinCategory1("item4", botheredOthers == "Yes")
+                                        surveyViewModel.updateSnoringFrequency(snoreFrequency)
+                                        surveyViewModel.updateSnoringBothersOthers(botheredOthers == "Yes")
+                                    } else {
+                                        // Set default values for non-snorers
+                                        surveyViewModel.updateSnoringFrequency("Never or nearly never")
+                                        surveyViewModel.updateSnoringBothersOthers(false)
+                                    }
+                                    
                                     val hasFrequentApnea = breathingQuit == "Nearly every day" || breathingQuit == "3–4 times a week"
                                     surveyViewModel.updateSleepHabits(
                                         hours = surveyViewModel.sleepHours.value,
@@ -214,9 +249,6 @@ fun SleepHabits2ScreenContent(
                                         snoringLevel = surveyViewModel.snoringLevel.value,
                                         observedApnea = hasFrequentApnea
                                     )
-                                    // Update new fields
-                                    surveyViewModel.updateSnoringFrequency(snoreFrequency)
-                                    surveyViewModel.updateSnoringBothersOthers(botheredOthers == "Yes")
                                     onNext()
                                 }
                             },

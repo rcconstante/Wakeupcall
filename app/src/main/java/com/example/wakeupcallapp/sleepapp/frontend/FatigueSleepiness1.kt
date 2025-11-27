@@ -44,8 +44,17 @@ fun FatigueSleepiness1ScreenContent(
     onNext: () -> Unit = {},
     onBack: () -> Unit = {}
 ) {
-    var tiredDuringDay by remember { mutableStateOf("") }
-    var tiredAfterSleep by remember { mutableStateOf("") }
+    // Get saved values from ViewModel to persist when navigating back
+    val currentTiredDuringDay by surveyViewModel.tiredDuringDay.collectAsState()
+    val currentTiredAfterSleep by surveyViewModel.tiredAfterSleep.collectAsState()
+    
+    // Initialize local state from ViewModel values
+    var tiredDuringDay by remember(currentTiredDuringDay) { 
+        mutableStateOf(currentTiredDuringDay.ifEmpty { "" }) 
+    }
+    var tiredAfterSleep by remember(currentTiredAfterSleep) { 
+        mutableStateOf(currentTiredAfterSleep.ifEmpty { "" }) 
+    }
     var showError by remember { mutableStateOf(false) }
 
     Box(
