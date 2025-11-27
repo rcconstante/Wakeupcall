@@ -348,23 +348,130 @@ def calculate_top_risk_factors(input_features, osa_probability):
     
     return formatted_factors
 
-# Feature list (must match WakeUpCall_3Class5Fold_Pipeline.pkl training order)
-# Based on new model with 33 engineered features - 27 input features
-# Includes Age_Group, Depression, and individual STOP/BANG items
+# Feature list (must match lightgbm_sleep_apnea_model.pkl training order)
+# Based on model trained with 33 engineered features in exact order
 FEATURES = [
-    'Age', 'Age_Group', 'Sex', 'Height', 'Weight', 'BMI', 'Neck_Circumference',
-    'Smokes', 'Alcohol', 'Snoring', 'Sleepiness',
-    'Epworth_Score', 'Berlin_Score',
+    # Demographics
+    'Age', 'Sex', 'Age_Group',
+    # Anthropometrics
+    'Height', 'Weight', 'BMI', 'BMI_Category',
+    'Neck_Circumference', 'Neck_Above_40',
+    'Neck_Height_Ratio', 'Weight_Height_Ratio',
+    # Lifestyle
+    'Smokes', 'Alcohol',
+    # Sleep symptoms
+    'Snoring', 'Sleepiness', 'Epworth_Score', 'ESS_Category',
+    # Medical history
     'Hypertension', 'Diabetes', 'Depression',
-    'STOP_Snore', 'STOP_Tired', 'STOP_ObsApnea', 'STOP_Pressure',
-    'BANG_Age', 'BANG_BMI', 'BANG_Neck', 'BANG_Gender',
-    'STOPBANG'
+    # STOP components
+    'STOP_Snore', 'STOP_Tired', 'STOP_ObsApnea', 'STOP_Pressure', 'STOP_Count',
+    # BANG components
+    'BANG_Age', 'BANG_BMI', 'BANG_Neck', 'BANG_Gender', 'BANG_Total',
+    # Composite scores
+    'STOPBANG', 'Berlin_Score',
+    # Composite feature
+    'Airway_Composite'
 ]
 
-# Columns to scale (numerical features) - pipeline handles scaling internally
+# Columns to scale (numerical features) - must match training scaler
 NUM_COLS = [
-    'Age', 'Height', 'Weight', 'BMI', 'Neck_Circumference', 'Epworth_Score', 'STOPBANG'
+    'Age', 'Height', 'Weight', 'BMI', 'BMI_Category',
+    'Neck_Circumference', 'Neck_Height_Ratio', 'Weight_Height_Ratio',
+    'Epworth_Score', 'STOP_Count', 'BANG_Total', 'STOPBANG',
+    'Berlin_Score', 'Airway_Composite'
 ]
+
+# ESS Category encoding (must match training label encoder)
+ESS_CATEGORY_MAP = {
+    'Mild Sleepiness': 0,
+    'Moderate Sleepiness': 1,
+    'Normal': 2,
+    'Severe Sleepiness': 3
+}
+
+
+def calculate_ess_category(ess_score):
+    """Calculate ESS category from score (matches training notebook)"""
+    if ess_score < 10:
+        return "Normal"
+    elif ess_score <= 12:
+        return "Mild Sleepiness"
+    elif ess_score <= 15:
+        return "Moderate Sleepiness"
+    else:
+        return "Severe Sleepiness"
+
+
+def calculate_bmi_category(bmi):
+    """Calculate BMI category (0-3) matching training notebook"""
+    if bmi <= 25:
+        return 0
+    elif bmi <= 30:
+        return 1
+    elif bmi <= 35:
+        return 2
+    else:
+        return 3
+
+
+def engineer_features(raw_features):
+    """
+    Calculate all engineered features from raw input.
+    Must match the feature engineering in the training notebook exactly.
+    """
+    # Extract raw values
+    height = raw_features['Height']
+    weight = raw_features['Weight']
+    bmi = raw_features['BMI']
+    neck = raw_features['Neck_Circumference']
+    ess_score = raw_features['Epworth_Score']
+    alcohol = raw_features['Alcohol']
+    snoring = raw_features['Snoring']
+    
+    # STOP components
+    stop_snore = raw_features['STOP_Snore']
+    stop_tired = raw_features['STOP_Tired']
+    stop_obs = raw_features['STOP_ObsApnea']
+    stop_pressure = raw_features['STOP_Pressure']
+    
+    # BANG components
+    bang_age = raw_features['BANG_Age']
+    bang_bmi = raw_features['BANG_BMI']
+    bang_neck = raw_features['BANG_Neck']
+    bang_gender = raw_features['BANG_Gender']
+    
+    # Calculate engineered features
+    engineered = raw_features.copy()
+    
+    # 1. Neck_Above_40
+    engineered['Neck_Above_40'] = 1 if neck > 40 else 0
+    
+    # 2. Anthropometric ratios
+    engineered['Neck_Height_Ratio'] = neck / height if height > 0 else 0
+    engineered['Weight_Height_Ratio'] = weight / height if height > 0 else 0
+    
+    # 3. ESS Category (encoded)
+    ess_cat_str = calculate_ess_category(ess_score)
+    engineered['ESS_Category'] = ESS_CATEGORY_MAP.get(ess_cat_str, 2)  # Default to "Normal"
+    
+    # 4. STOP_Count
+    engineered['STOP_Count'] = stop_snore + stop_tired + stop_obs + stop_pressure
+    
+    # 5. BANG_Total
+    engineered['BANG_Total'] = bang_age + bang_bmi + bang_neck + bang_gender
+    
+    # 6. Airway_Composite
+    engineered['Airway_Composite'] = (
+        0.3 * bmi +
+        0.3 * neck +
+        0.2 * alcohol +
+        0.2 * snoring
+    )
+    
+    # 7. BMI_Category
+    engineered['BMI_Category'] = calculate_bmi_category(bmi)
+    
+    return engineered
 
 
 def calculate_age_group(age):
@@ -1082,8 +1189,8 @@ def submit_survey():
         stop_obs_apnea = 1 if observed else 0
         stop_pressure = 1 if pressure else 0
         
-        # Build feature dictionary for ML model (25 features for new WakeUpCall_3Class5Fold_Pipeline.pkl)
-        input_features = {
+        # Build raw feature dictionary (before engineering)
+        raw_features = {
             'Age': age,
             'Age_Group': age_group,
             'Sex': sex,  # Already binary: 1=male, 0=female
@@ -1111,23 +1218,35 @@ def submit_survey():
             'STOPBANG': stopbang_score
         }
         
+        # Apply feature engineering to get all 33 features
+        input_features = engineer_features(raw_features)
+        
         # Make prediction if model is loaded
         osa_probability = 0.0
+        certainty = 0.0  # Initialize certainty - will be updated by model prediction
         risk_level = "Unknown"
         recommendation = ""
         
         if model is not None:
             try:
                 # DEBUG: Print input features
-                print(f"🔍 DEBUG: Input features for ML model:")
+                print(f"🔍 DEBUG: Input features for ML model ({len(input_features)} features):")
                 for feature, value in input_features.items():
                     print(f"  {feature}: {value}")
                 
-                # Create DataFrame with correct feature order
+                # Create DataFrame with correct feature order (33 features)
                 X_input = pd.DataFrame([{f: input_features[f] for f in FEATURES}])
                 print(f"🔍 DEBUG: DataFrame shape: {X_input.shape}")
                 print(f"🔍 DEBUG: DataFrame columns: {list(X_input.columns)}")
-                print(f"🔍 DEBUG: DataFrame values: {X_input.iloc[0].tolist()}")
+                
+                # Scale numerical features using the loaded scaler
+                if scaler is not None:
+                    print(f"🔍 DEBUG: Scaling numerical features with scaler")
+                    X_input[NUM_COLS] = scaler.transform(X_input[NUM_COLS])
+                else:
+                    print(f"⚠️ WARNING: Scaler not loaded, prediction may be inaccurate")
+                
+                print(f"🔍 DEBUG: DataFrame values (after scaling): {X_input.iloc[0].tolist()}")
                 
                 # Get prediction - 3-class model (Low, Intermediate, High)
                 y_proba = model.predict_proba(X_input)[0]
@@ -1144,10 +1263,12 @@ def submit_survey():
                 
                 # Get high risk probability for backward compatibility
                 osa_probability = float(y_proba[2]) if len(y_proba) > 2 else float(y_proba[predicted_class_idx])
-                certainty = float(y_proba[predicted_class_idx]) * 100
+                # Get the certainty of the predicted class (this is what should be shown to user)
+                certainty = float(y_proba[predicted_class_idx])
                 
                 print(f"🔍 DEBUG: Class probabilities: Low={y_proba[0]:.3f}, Intermediate={y_proba[1]:.3f}, High={y_proba[2]:.3f}")
-                print(f"🔍 DEBUG: Prediction: {risk_level}, Certainty: {certainty:.2f}%")
+                print(f"🔍 DEBUG: Prediction: {risk_level}, Certainty: {certainty*100:.2f}%")
+                print(f"🔍 DEBUG: Sending certainty={certainty:.3f} (will be displayed as {certainty*100:.0f}%)")
                 
                 # Generate personalized recommendation
                 recommendation = generate_ml_recommendation(
@@ -1188,7 +1309,7 @@ def submit_survey():
                     }
                 },
                 'prediction': {
-                    'osa_probability': round(osa_probability, 3),
+                    'osa_probability': round(certainty, 3),  # Send certainty (predicted class probability) to display as percentage
                     'risk_level': risk_level,
                     'recommendation': recommendation
                 },
@@ -1217,7 +1338,7 @@ def submit_survey():
                 print(f"🔄 Updating survey for user {user_id}:")
                 print(f"   Age: {age}, Sex: {demo.get('sex', 'male')}, BMI: {bmi:.1f}")
                 print(f"   ESS: {ess_score}, Berlin: {berlin_score_binary}, STOP-BANG: {stopbang_score}")
-                print(f"   OSA Probability: {osa_probability:.3f}, Risk: {risk_level}")
+                print(f"   Certainty: {certainty:.3f} ({certainty*100:.1f}%), Risk: {risk_level}")
                 
                 cursor.execute('''
                     UPDATE user_surveys 
@@ -1237,7 +1358,7 @@ def submit_survey():
                     WHERE user_id = ?
                 ''', (age, demo.get('sex', 'male'), height_cm, weight_kg, neck_cm, bmi,
                       hypertension, diabetes, depression, smokes, alcohol,
-                      ess_score, berlin_score_binary, stopbang_score, osa_probability, risk_level,
+                      ess_score, berlin_score_binary, stopbang_score, certainty, risk_level,
                       daily_steps, average_daily_steps, sleep_duration, weekly_steps_json, weekly_sleep_json,
                       snoring_level, snoring_frequency, snoring_bothers_others,
                       tired_during_day, tired_after_sleep, feels_sleepy_daytime,
@@ -1277,7 +1398,7 @@ def submit_survey():
                             ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (user_id, age, demo.get('sex', 'male'), height_cm, weight_kg, neck_cm, bmi,
                       hypertension, diabetes, depression, smokes, alcohol,
-                      ess_score, berlin_score_binary, stopbang_score, osa_probability, risk_level,
+                      ess_score, berlin_score_binary, stopbang_score, certainty, risk_level,
                       daily_steps, average_daily_steps, sleep_duration, weekly_steps_json, weekly_sleep_json,
                       snoring_level, snoring_frequency, snoring_bothers_others,
                       tired_during_day, tired_after_sleep, feels_sleepy_daytime,
@@ -1287,8 +1408,10 @@ def submit_survey():
                       ess_after_lunch, ess_traffic_stop))
                 survey_id = cursor.lastrowid
                 print(f"✅ Created new survey (ID: {survey_id}) for user {user_id}")
+                print(f"   Certainty: {certainty:.3f} ({certainty*100:.1f}%), Risk: {risk_level}")
             
             conn.commit()
+            print(f"✅ Database committed - survey data saved successfully")
         except Exception as db_error:
             conn.rollback()
             print(f"❌ Database error: {db_error}")
@@ -1315,7 +1438,7 @@ def submit_survey():
                 }
             },
             'prediction': {
-                'osa_probability': round(osa_probability, 3),
+                'osa_probability': round(certainty, 3),  # Send certainty (predicted class probability) to display as percentage
                 'risk_level': risk_level,
                 'recommendation': recommendation
             },
@@ -1424,18 +1547,44 @@ def predict_osa_risk():
         if 'STOP_Pressure' not in data:
             data['STOP_Pressure'] = data.get('Hypertension', 0)
         
-        # Validate all required features are present
-        missing_features = [f for f in FEATURES if f not in data]
-        if missing_features:
-            return jsonify({
-                'error': f'Missing required features: {missing_features}',
-                'success': False
-            }), 400
+        # Build raw features dict for engineering
+        raw_features = {
+            'Age': data.get('Age', 30),
+            'Age_Group': data.get('Age_Group', calculate_age_group(data.get('Age', 30))),
+            'Sex': data.get('Sex', 0),
+            'Height': data.get('Height', 170),
+            'Weight': data.get('Weight', 70),
+            'BMI': data.get('BMI', 25),
+            'Neck_Circumference': data.get('Neck_Circumference', 35),
+            'Smokes': data.get('Smokes', 0),
+            'Alcohol': data.get('Alcohol', 0),
+            'Snoring': data.get('Snoring', 0),
+            'Sleepiness': data.get('Sleepiness', 0),
+            'Epworth_Score': data.get('Epworth_Score', 6),
+            'Berlin_Score': data.get('Berlin_Score', 0),
+            'Hypertension': data.get('Hypertension', 0),
+            'Diabetes': data.get('Diabetes', 0),
+            'Depression': data.get('Depression', 0),
+            'STOP_Snore': data.get('STOP_Snore', 0),
+            'STOP_Tired': data.get('STOP_Tired', 0),
+            'STOP_ObsApnea': data.get('STOP_ObsApnea', 0),
+            'STOP_Pressure': data.get('STOP_Pressure', 0),
+            'BANG_Age': data.get('BANG_Age', bang_items['BANG_Age']),
+            'BANG_BMI': data.get('BANG_BMI', bang_items['BANG_BMI']),
+            'BANG_Neck': data.get('BANG_Neck', bang_items['BANG_Neck']),
+            'BANG_Gender': data.get('BANG_Gender', bang_items['BANG_Gender']),
+            'STOPBANG': data.get('STOPBANG', data.get('STOPBANG_Total', 0))
+        }
         
-        # Create DataFrame with correct feature order
-        X_input = pd.DataFrame([{f: data[f] for f in FEATURES}])
+        # Apply feature engineering to get all 33 features
+        input_features = engineer_features(raw_features)
         
-        # Pipeline handles scaling internally - no separate scaling needed
+        # Create DataFrame with correct feature order (33 features)
+        X_input = pd.DataFrame([{f: input_features[f] for f in FEATURES}])
+        
+        # Scale numerical features using the loaded scaler
+        if scaler is not None:
+            X_input[NUM_COLS] = scaler.transform(X_input[NUM_COLS])
         
         # Get prediction - 3-class model (Low, Intermediate, High)
         y_proba = model.predict_proba(X_input)[0]
@@ -1665,8 +1814,8 @@ def predict_from_google_fit():
         # Estimate Berlin score based on snoring and sleepiness
         berlin_score = 1 if (data.get('snores', False) and data.get('feels_sleepy', False)) else 0
         
-        # Build feature dictionary for new 27-feature model
-        input_features = {
+        # Build raw feature dictionary
+        raw_features = {
             'Age': age,
             'Age_Group': age_group,
             'Sex': sex,
@@ -1694,10 +1843,15 @@ def predict_from_google_fit():
             'STOPBANG': stopbang_total
         }
         
-        # Create DataFrame with correct feature order
+        # Apply feature engineering to get all 33 features
+        input_features = engineer_features(raw_features)
+        
+        # Create DataFrame with correct feature order (33 features)
         X_input = pd.DataFrame([{f: input_features[f] for f in FEATURES}])
         
-        # Pipeline handles scaling internally
+        # Scale numerical features using the loaded scaler
+        if scaler is not None:
+            X_input[NUM_COLS] = scaler.transform(X_input[NUM_COLS])
         
         # Get prediction - 3-class model (Low, Intermediate, High)
         y_proba = model.predict_proba(X_input)[0]
