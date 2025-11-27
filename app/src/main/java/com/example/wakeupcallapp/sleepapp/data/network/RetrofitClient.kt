@@ -24,7 +24,7 @@ object RetrofitClient {
     
     // TODO: Replace with your computer's IP address
     // Example: "http://127.0.0.1.5:5000/"
-    private const val BASE_URL = "http://192.168.18.3:5000/" // Physical device - YOUR COMPUTER'S IP
+    private const val BASE_URL = "http://192.168.1.100:5000/" // Physical device - YOUR COMPUTER'S IP
     // For emulator only: "http://10.0.2.2:5000/"
     
     // Use HEADERS level to avoid consuming response body stream for large files
